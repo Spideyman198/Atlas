@@ -1,84 +1,44 @@
 # Architecture Overview
 
-> Read [`docs/adr/`](../adr/README.md) for *why*. This document describes *what*.
+Read [`docs/adr/`](../adr/README.md) for why the system is shaped this way. This
+document describes what it is.
 
 ## 1. System context
 
-Who talks to Atlas, and what Atlas talks to.
-
 ```mermaid
-C4Context
-    title Odoo Atlas — System Context
-
-    Person(user, "Business User", "Sales, purchasing, inventory, finance staff")
-    Person(admin, "Odoo Administrator", "Configures sources, models, permissions")
-
-    System_Boundary(atlas, "Odoo Atlas") {
-        System(odoo, "Odoo 19 CE + odoo_atlas", "ERP of record and the assistant UI")
-        System(api, "Atlas Engine", "Retrieval, orchestration, generation")
-    }
-
-    System_Ext(llm, "LLM Provider", "Anthropic Claude / OpenAI / Azure OpenAI")
-    System_Ext(emb, "Embedding Provider", "OpenAI / Voyage")
-
-    Rel(user, odoo, "Asks questions, reads cited answers", "HTTPS")
-    Rel(admin, odoo, "Configures", "HTTPS")
-    Rel(odoo, api, "Query / ingest commands", "HTTP + service token")
-    Rel(api, odoo, "Authorized reads as the acting user", "HTTP + context token")
-    Rel(api, llm, "Chat completion, tool calling", "HTTPS")
-    Rel(api, emb, "Batch embeddings", "HTTPS")
+flowchart LR
+    user[Business user] --> odoo
+    admin[Odoo administrator] --> odoo
+    odoo[Odoo 19 CE and odoo_atlas addon] -->|queries and ingest commands| api
+    api[Atlas engine] -->|authorized reads as the acting user| odoo
+    api -->|chat completion and tool calling| llm[LLM provider]
+    api -->|batch embeddings| emb[Embedding provider]
 ```
 
-Two things to notice, because they are the design:
+Two properties of this picture carry most of the design:
 
-1. **The arrow from Atlas Engine back into Odoo.** The engine has no direct read
-   path to ERP data. Everything goes through Odoo, as the acting user
+1. The engine has no direct read path to ERP data. Every read goes back through
+   Odoo, executed as the acting user
    ([ADR-0006](../adr/0006-data-access-and-authorization.md)).
-2. **The user only ever touches Odoo.** The engine is never publicly exposed.
+2. Users only ever talk to Odoo. The engine is not publicly exposed.
 
 ## 2. Container view
 
 ```mermaid
 flowchart TB
-    subgraph browser["Browser"]
-        owl["OWL Chat Component<br/><i>M11</i>"]
-    end
-
-    subgraph odoo_c["odoo — Odoo 19 CE"]
-        addon["odoo_atlas addon<br/>models · views · security · controllers"]
-        cron["ir.cron<br/>incremental sync trigger"]
-    end
-
-    subgraph engine["atlas-api / atlas-worker — FastAPI + atlas package"]
-        iface["interfaces/<br/>REST routers · CLI"]
-        app["application/<br/>use cases"]
-        dom["domain/<br/>entities · ports"]
-        infra["infrastructure/<br/>adapters"]
-    end
-
-    subgraph pg["PostgreSQL 17 + pgvector 0.8"]
-        dbodoo[("db: odoo")]
-        dbatlas[("db: atlas<br/>documents · chunks · jobs")]
-    end
-
-    ext_llm["LLM Provider"]
-    ext_emb["Embedding Provider"]
-
-    owl -->|"JSON-RPC"| addon
-    addon -->|"HTTP + service token"| iface
-    cron -->|"enqueue sync"| addon
-    iface --> app
-    app --> dom
-    infra -.->|"implements ports"| dom
-    app -->|"depends on ports only"| infra
-    addon --> dbodoo
-    infra --> dbatlas
-    infra -->|"authorized reads"| addon
-    infra --> ext_llm
-    infra --> ext_emb
-
-    classDef pure fill:#1f6f4a,stroke:#0d3d28,color:#fff
-    class dom pure
+    owl[OWL chat component] -->|JSON-RPC| addon
+    cron[ir.cron sync trigger] --> addon
+    addon[odoo_atlas addon] -->|HTTP and service token| iface
+    iface[interfaces: routers and CLI] --> app
+    app[application: use cases] --> dom
+    app --> infra
+    dom[domain: entities and ports]
+    infra[infrastructure: adapters] -.->|implements ports| dom
+    infra -->|authorized reads| addon
+    addon --> dbodoo[Odoo database]
+    infra --> dbatlas[Atlas database with pgvector]
+    infra --> llm[LLM provider]
+    infra --> emb[Embedding provider]
 ```
 
 The dashed arrow is the **Dependency Inversion Principle** drawn literally:
@@ -96,12 +56,12 @@ Three rules make that diagram true, and all three are enforced in CI by
 
 ## 3. Target repository layout
 
-Directories marked *(Mx)* arrive at that milestone. M0 creates only what is listed
-under "already present".
+Paths marked *(Mx)* are not built yet and arrive at that milestone; everything else
+exists today. See [ROADMAP.md](../../ROADMAP.md).
 
 ```
 odoo-atlas/
-├── .github/workflows/            # (M1) lint, type, test, security, release
+├── .github/workflows/            #   lint, type, test, security, release
 ├── addons/
 │   └── odoo_atlas/               # (M5) the Odoo addon — a thin adapter
 │       ├── __manifest__.py
@@ -115,12 +75,12 @@ odoo-atlas/
 │       ├── static/src/           # (M11) OWL components, SCSS, XML templates
 │       └── tests/                #   Odoo TransactionCase / HttpCase
 ├── services/
-│   └── atlas/                    # (M2) the engine — framework-agnostic library
+│   └── atlas/                    #   the engine — framework-agnostic library
 │       ├── pyproject.toml
 │       ├── src/atlas/
-│       │   ├── domain/           #   entities, value objects, ports. Zero I/O.
-│       │   ├── application/      #   use cases. Orchestration only.
-│       │   ├── infrastructure/   #   adapters
+│       │   ├── domain/           # (M2) entities, value objects, ports. Zero I/O.
+│       │   ├── application/      # (M2) use cases. Orchestration only.
+│       │   ├── infrastructure/   # (M3) adapters
 │       │   │   ├── llamaindex/   #     ONLY package that may import llama_index
 │       │   │   ├── persistence/  #     PgVectorStore — our schema, SQLAlchemy Core
 │       │   │   ├── providers/    #     Anthropic / OpenAI / Voyage SDK adapters
@@ -131,25 +91,25 @@ odoo-atlas/
 │       ├── migrations/           # (M4) Alembic
 │       └── tests/{unit,integration,contract}
 ├── evaluation/                   # (M12) golden question set + metrics harness
-├── docker/                       # (M1) Dockerfiles per image
+├── docker/                       #   Dockerfiles per image
 ├── docs/
-│   ├── adr/                      # ✅ already present
-│   ├── architecture/             # ✅ already present
-│   ├── assets/                   # (M14) diagrams, screenshots, GIFs
-│   ├── installation.md           # (M1)
+│   ├── adr/
+│   ├── architecture/
+│   ├── assets/                   # (M14) diagrams and screenshots
+│   ├── installation.md
 │   ├── developer-guide.md        # (M2)
 │   ├── api.md                    # (M6)
 │   └── deployment.md             # (M14)
-├── scripts/                      # (M1) bootstrap, seed, reindex helpers
-├── docker-compose.yml            # (M1)
-├── Makefile                      # (M1)
-├── pyproject.toml                # (M1) workspace-level tooling config
-├── README.md                     # ✅
-├── ROADMAP.md                    # ✅
-├── CHANGELOG.md                  # ✅
-├── CONTRIBUTING.md               # ✅
-├── LICENSE / COPYING             # ✅
-├── .gitignore / .gitattributes / .editorconfig   # ✅
+├── scripts/                      # (M7) seed and reindex helpers
+├── docker-compose.yml
+├── Makefile
+├── pyproject.toml                #   workspace-level tooling config
+├── README.md
+├── ROADMAP.md
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── LICENSE / COPYING
+└── .gitignore / .gitattributes / .editorconfig
 ```
 
 ## 4. The layers, and what belongs in each
@@ -168,7 +128,7 @@ by injection. That is what makes the fakes in M3 possible and the unit tests fas
 
 ## 5. How this maps to SOLID
 
-Not a checklist for its own sake — each principle is doing a specific job here.
+Each principle is doing a specific job here.
 
 - **Single Responsibility.** A `Chunker` chunks. A `Retriever` retrieves. An
   `AnswerQuestion` use case orchestrates them and does neither. When "add citation

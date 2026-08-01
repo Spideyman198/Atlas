@@ -59,7 +59,7 @@ sequenceDiagram
     OWL-->>U: answer with clickable citations
 ```
 
-### What to notice
+### Notes
 
 - **Step order is the security model.** The authorization call sits *between*
   retrieval and prompt assembly. There is no path from `pgvector` to `LLM` that
@@ -131,14 +131,14 @@ sequenceDiagram
                 W->>DB: lookup embedding_cache
                 W->>EMB: embed uncached batch (≤96)
                 EMB-->>W: vectors
-                W->>DB: BEGIN; DELETE old chunks;<br/>UPSERT document; COPY chunks; COMMIT
+                W->>DB: one transaction, delete old chunks<br/>upsert document, COPY chunks, commit
             end
         end
-        W->>JQ: advance watermark; status=succeeded
+        W->>JQ: advance watermark, status=succeeded
     end
 ```
 
-### What to notice
+### Notes
 
 - **`FOR UPDATE SKIP LOCKED`** gives a durable, transactional job queue with no
   Redis, no Celery, and no extra container. Multiple workers can drain the same
