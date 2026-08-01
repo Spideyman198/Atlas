@@ -1,188 +1,179 @@
-<div align="center">
-
 # Odoo Atlas
 
-**An AI-powered enterprise copilot for Odoo Community Edition.**
+An AI assistant for Odoo Community Edition. It answers questions about data held in
+Odoo in natural language, and it applies the same access rules the asking user
+already has in the ERP.
 
-Ask your ERP questions in plain language. Get answers grounded in your own data,
-with clickable citations — and never see a record you weren't already allowed to open.
+[![CI](https://github.com/Spideyman198/Atlas/actions/workflows/ci.yml/badge.svg)](https://github.com/Spideyman198/Atlas/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-LGPL--3.0-blue.svg)](LICENSE)
 
-[![License: LGPL v3](https://img.shields.io/badge/License-LGPL_v3-blue.svg)](LICENSE)
-[![Odoo 19 CE](https://img.shields.io/badge/Odoo-19.0%20CE-714B67.svg)](https://github.com/odoo/odoo)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB.svg)](https://www.python.org/)
-[![PostgreSQL 17 + pgvector](https://img.shields.io/badge/PostgreSQL-17%20%2B%20pgvector-4169E1.svg)](https://github.com/pgvector/pgvector)
-[![Ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
-[![Typed: mypy strict](https://img.shields.io/badge/typed-mypy%20strict-2A6DB2.svg)](https://mypy-lang.org/)
-
-</div>
-
----
-
-> [!NOTE]
-> **Status: in active development.** Milestone **M0 — Planning & Architecture** is
-> complete; the architecture and its rationale are fully documented and reviewable
-> in [`docs/`](docs/). Implementation proceeds milestone by milestone — see
-> [ROADMAP.md](ROADMAP.md) for what has landed and what is next. Screenshots and a
-> demo recording arrive with M11/M14.
+Status: early development. The architecture is documented and the development
+environment runs. The assistant itself is not implemented yet — see
+[ROADMAP.md](ROADMAP.md) for what has landed and what is next.
 
 ## The problem
 
-An Odoo instance holds everything a business knows about itself — every customer,
-order, invoice, stock move, and opportunity — and makes almost none of it
-*askable*. Answering "which customers haven't ordered in six months?" means knowing
-which model to open, which filters to combine, and which group-by to apply. Most
-people don't, so they ask someone who does, and that person builds a pivot table.
+An Odoo instance holds everything a business knows about itself, and makes very
+little of it askable. Answering "which customers haven't ordered in six months?"
+means knowing which model to open, which filters to combine and which group-by to
+apply. Most people don't, so they ask someone who does.
 
-Bolting a chatbot onto the side does not fix this. A chatbot that reads your
-database with an admin connection is a data breach with a friendly interface.
+Adding a chatbot on the side does not fix this. A chatbot that reads the database
+with an administrator connection ignores Odoo's record rules entirely, which makes
+it a privilege escalation tool.
 
-## What Odoo Atlas does
+## What it does
 
-An assistant that lives **inside** Odoo, answers from **your** data, and inherits
-**your** permissions.
-
-| Question | How Atlas answers it |
+| Question | How it is answered |
 | --- | --- |
-| *"Where is Sales Order SO00035?"* | Live ORM read via a typed tool call |
-| *"Which invoices are overdue?"* | Live aggregation — never a stale embedding |
-| *"Which products are low on stock?"* | `stock.quant` aggregation against reorder rules |
-| *"Summarise this customer."* | Hybrid: live facts + semantic recall over notes |
-| *"Which products generated the most revenue?"* | `read_group` over confirmed orders |
-| *"What does our refund policy say?"* | Vector retrieval over ingested PDFs and manuals |
+| Where is sales order SO00035? | Live ORM read through a typed tool call |
+| Which invoices are overdue? | Live aggregation, not a stored embedding |
+| Which products are low on stock? | `stock.quant` aggregation against reorder rules |
+| Summarise this customer | Live facts plus semantic recall over notes |
+| Which products generated the most revenue? | `read_group` over confirmed orders |
+| What does our refund policy say? | Vector search over ingested PDFs and manuals |
 
-## What makes it different
+## How it works
 
-**🔐 Authorization is not an afterthought — it is the architecture.**
-Every retrieved record is re-checked against Odoo's own record rules, as the asking
-user, on every request. Not baked into the index at ingestion time (which goes stale
-and silently over-discloses), not approximated with metadata filters. Odoo decides;
-Atlas obeys. The assistant is provably incapable of surfacing a record the user
-could not open in the UI. → [ADR-0006](docs/adr/0006-data-access-and-authorization.md)
-
-**🧮 It knows when *not* to use RAG.**
-"Which invoices are overdue?" is arithmetic over live data, not a similarity search.
-A router classifies intent and routes structured questions to typed, validated,
-read-only tools that compile to Odoo ORM calls — **never** to generated SQL.
-→ [ADR-0006](docs/adr/0006-data-access-and-authorization.md)
-
-**🔌 No vendor lock-in, in either direction.**
-Chat and embeddings are separate ports with separate adapters, because Anthropic
-ships no embedding API and pretending otherwise produces a leaky abstraction.
-Claude for reasoning + OpenAI or Voyage for embeddings is a supported, documented
-configuration. → [ADR-0005](docs/adr/0005-model-provider-strategy.md)
-
-**🧩 LlamaIndex, contained.**
-The retrieval framework lives entirely in one infrastructure package, behind ports
-the domain owns — `Retriever`, `VectorStore`, `EmbeddingProvider`, `DocumentLoader`,
-`ChatProvider`. It calls *back* into our provider layer through bridge adapters, so
-there is one retry policy and one cost meter, not two. `import-linter` fails the
-build if `llama_index` appears anywhere else. Replacing it would touch one directory.
-→ [ADR-0003](docs/adr/0003-rag-framework-selection.md)
-
-**🧱 One stateful service.**
-pgvector in the PostgreSQL you already run for Odoo. No Pinecone account, no Qdrant
-container, no ERP data leaving your infrastructure.
-→ [ADR-0004](docs/adr/0004-vector-store-and-index-strategy.md)
-
-**📐 Hexagonal, and enforced by CI.**
-`domain` has zero I/O. `application` depends only on ports. The engine never imports
-`odoo` — checked by `import-linter`, not by good intentions. Which is what makes the
-whole test suite runnable offline with no API key.
-→ [Architecture Overview](docs/architecture/01-overview.md)
-
-**📊 Retrieval quality is measured, not asserted.**
-A golden question set with recall@k, MRR, nDCG, and a faithfulness judge. Claims in
-this README come with numbers attached. → M12
-
-## Architecture at a glance
+Three processes and one PostgreSQL cluster:
 
 ```mermaid
 flowchart LR
-    U([User]) --> OWL["OWL Chat UI"]
-    OWL --> AD["odoo_atlas addon<br/><i>thin adapter — no AI logic</i>"]
-    AD -->|"HTTP + service token"| API["atlas-api<br/><i>FastAPI · hexagonal core</i>"]
-    API -->|"authorized reads<br/>as the acting user"| AD
-    API --> VEC[("PostgreSQL 17<br/>pgvector · HNSW + GIN")]
+    U([User]) --> AD["odoo_atlas addon"]
+    AD -->|HTTP| API["atlas-api"]
+    API -->|authorized reads| AD
+    API --> VEC[("PostgreSQL + pgvector")]
     API --> LLM{{"Claude / OpenAI"}}
-    AD --> ODB[("PostgreSQL 17<br/>Odoo database")]
-    W["atlas-worker<br/><i>ingestion queue</i>"] --> VEC
-    W --> AD
-
-    classDef sec fill:#7a1f2b,stroke:#4a1119,color:#fff
-    class AD sec
+    AD --> ODB[("PostgreSQL: Odoo")]
 ```
 
-The AI engine runs **beside** Odoo, not inside it — Odoo's synchronous pre-forked
-workers must never block on a 20-second LLM call, and the AI dependency tree must
-never collide with Odoo's pinned one.
-→ [ADR-0002](docs/adr/0002-sidecar-service-topology.md)
+The addon is a thin adapter: models, views, security and the chat UI, with no AI
+code in it. The engine holds retrieval and orchestration and never imports `odoo`;
+it reaches the ERP over HTTP. Running the engine as a separate process keeps the AI
+dependency tree away from Odoo's pinned one, and keeps 20-second model calls off
+Odoo's synchronous worker pool ([ADR-0002](docs/adr/0002-sidecar-service-topology.md)).
+
+### Access control
+
+Retrieval runs in three stages. A vector and lexical search in pgvector produces
+candidates, filtered by company and visibility. Those candidates are then sent back
+to Odoo, which runs `search([('id','in',ids)])` as the asking user so its record
+rules apply. Only the surviving rows are assembled into the prompt.
+
+The second stage cannot be disabled by configuration. Removing the first stage would
+make the system slower but no less safe, which is the property we want: correctness
+does not depend on how fresh the index is. Baking permissions into the index at
+ingestion time was rejected because it goes stale silently the moment a record rule,
+a group membership or a company assignment changes
+([ADR-0006](docs/adr/0006-data-access-and-authorization.md)).
+
+Structured questions do not use retrieval at all. The model calls typed tools that
+compile to validated Odoo domains and execute as the asking user. It never emits SQL
+and never emits a raw domain.
+
+### Retrieval
+
+LlamaIndex provides node parsing, fusion retrieval and reranking. It is confined to
+`atlas.infrastructure.llamaindex` and reached through ports the domain owns —
+`DocumentLoader`, `EmbeddingProvider`, `VectorStore`, `Retriever`, `ChatProvider`.
+Bridge adapters make LlamaIndex delegate back to our provider and persistence
+layers, so there is one retry policy, one cost meter and one database schema rather
+than two ([ADR-0003](docs/adr/0003-rag-framework-selection.md)).
+
+Chat and embedding providers are separate ports because Anthropic ships no embedding
+API. Claude for generation with OpenAI or Voyage for embeddings is a supported
+configuration ([ADR-0005](docs/adr/0005-model-provider-strategy.md)).
+
+## Requirements
+
+- Docker Engine 24+ and Compose v2.20+
+- About 6 GB of disk and 4 GB of RAM
+
+No local Python, PostgreSQL or Odoo installation is needed. Lint, type-check and
+test all run in a container.
+
+## Quick start
+
+```bash
+git clone https://github.com/Spideyman198/Atlas.git
+cd Atlas
+make init
+make up
+```
+
+On Windows, use `.\make.ps1 <target>` instead of `make <target>`.
+
+First boot initialises the Odoo database and takes a few minutes. When it finishes:
+
+- Odoo: <http://localhost:8069> (`admin` / `admin`)
+- Engine API docs: <http://127.0.0.1:8000/docs>
+
+Check the engine can reach its database:
+
+```bash
+curl http://127.0.0.1:8000/readyz
+```
+
+```json
+{"status": "ready", "checks": {"database": "ok", "pgvector": "ok (0.8.6)"}}
+```
+
+Full instructions and troubleshooting are in [docs/installation.md](docs/installation.md).
+
+## Development
+
+```bash
+make check    # ruff, mypy --strict, pytest
+make test     # tests with coverage
+make logs     # follow all services
+make help     # all targets
+```
+
+Three architectural rules are enforced by `import-linter` in CI rather than by
+review: `domain` imports nothing else from `atlas`, nothing in `atlas` imports
+`odoo`, and nothing outside `atlas.infrastructure.llamaindex` imports `llama_index`.
+
+## Layout
+
+```
+addons/odoo_atlas/    Odoo addon: models, views, security, chat UI
+services/atlas/       Engine: domain / application / infrastructure / interfaces
+evaluation/           Golden question set and retrieval metrics
+docker/               Dockerfiles
+docs/                 ADRs and architecture documentation
+```
 
 ## Documentation
 
 | | |
 | --- | --- |
-| **[Architecture Overview](docs/architecture/01-overview.md)** | C4 diagrams, layering, repository layout, SOLID mapping, known limits |
-| **[Data Architecture](docs/architecture/02-data-architecture.md)** | ER diagrams, DDL, indexing strategy, performance design, migration policy |
-| **[Request Lifecycle](docs/architecture/03-request-lifecycle.md)** | Sequence diagrams for query, ingestion, and failure paths |
-| **[Architecture Decision Records](docs/adr/README.md)** | Seven decisions, each with the alternatives we rejected and why |
-| **[Roadmap](ROADMAP.md)** | Sixteen milestones, with acceptance criteria |
-| **[Contributing](CONTRIBUTING.md)** | Workflow, standards, commit conventions |
-| **[Changelog](CHANGELOG.md)** | Keep a Changelog / SemVer |
+| [Architecture overview](docs/architecture/01-overview.md) | Components, layering, repository layout, known limits |
+| [Data architecture](docs/architecture/02-data-architecture.md) | Schema, indexes, performance, migration policy |
+| [Request lifecycle](docs/architecture/03-request-lifecycle.md) | Query, ingestion and failure paths |
+| [Decision records](docs/adr/README.md) | Seven decisions with the alternatives that were rejected |
+| [Installation](docs/installation.md) | Setup and troubleshooting |
+| [Contributing](CONTRIBUTING.md) | Workflow, standards, commit conventions |
+| [Roadmap](ROADMAP.md) | Planned work |
+| [Changelog](CHANGELOG.md) | Released changes |
 
-Installation, developer, API, and deployment guides land with the milestones that
-make them true (M1, M2, M6, M14 respectively).
+## Limits
 
-## Tech stack
-
-| Layer | Choice | Rationale |
-| --- | --- | --- |
-| ERP | Odoo 19 CE | Target platform; LGPL-3 |
-| Addon | Odoo ORM, XML views, OWL 2 | Native UX, native security |
-| Engine | Python 3.12, FastAPI, `asyncio` | Async I/O for concurrent LLM calls |
-| Persistence | PostgreSQL 17, pgvector 0.8, SQLAlchemy 2.0 Core, Alembic | One stateful service; explicit SQL; reviewed migrations |
-| Retrieval | **LlamaIndex** (`llama-index-core`) — node parsing, fusion retrieval, reranking | Mature algorithms, confined to one infrastructure package → [ADR-0003](docs/adr/0003-rag-framework-selection.md) |
-| Search | HNSW + `tsvector` GIN, Reciprocal Rank Fusion, MMR | Hybrid beats dense-only on ERP text |
-| Models | Anthropic + OpenAI + Voyage, behind ports | Deployment flexibility, no lock-in |
-| Orchestration | Clean/Hexagonal architecture with owned ports | Authorization and observability stay outside the framework |
-| Quality | pytest, ruff, mypy `--strict`, import-linter, pre-commit | Enforced, not aspirational |
-| Delivery | Docker Compose, GitHub Actions, Trivy, pip-audit, gitleaks | Reproducible, scanned |
-
-## Quick start
-
-> Available from **M1**. It will be:
->
-> ```bash
-> cp .env.example .env && make up
-> ```
->
-> …bringing up Odoo, PostgreSQL + pgvector, and the Atlas engine, with a seeded demo
-> database, in one command.
-
-## Project layout
-
-```
-addons/odoo_atlas/    Odoo addon — models, views, security, OWL UI. Thin.
-services/atlas/       The engine — domain / application / infrastructure / interfaces
-evaluation/           Golden question set and retrieval metrics harness
-docker/               Dockerfiles
-docs/                 ADRs and architecture documentation
-```
-
-## Contributing
-
-Contributions welcome — read [CONTRIBUTING.md](CONTRIBUTING.md) first. Every
-architecturally significant change needs an ADR; that is the one rule we do not bend.
+- Designed for corpora up to roughly 10^6 chunks on a single PostgreSQL instance.
+  Beyond that, partition `chunks` by company or move dense search to a dedicated
+  engine.
+- Read-only. The assistant answers questions; it does not create or modify records.
+- Ingestion and prompts are tuned for English.
+- Semantic answers reflect the last incremental sync. Structured answers are live.
+- The vector index contains ERP content and must be protected like the Odoo database
+  itself. Access control protects the assistant, not the database.
 
 ## License
 
-**LGPL-3.0-or-later.** [`LICENSE`](LICENSE) holds the LGPL text and
-[`COPYING`](COPYING) the GPL-3.0 text it incorporates by reference.
+LGPL-3.0-or-later. [`LICENSE`](LICENSE) holds the LGPL text and [`COPYING`](COPYING)
+the GPL-3.0 text it incorporates by reference.
 
-In practice: you may deploy Atlas commercially and build on it, including alongside
-proprietary code. If you modify Atlas itself and distribute it, those modifications
-stay open. LGPL rather than AGPL is a deliberate choice to keep Atlas deployable
-inside corporate infrastructure — reasoning in
-[ADR-0007](docs/adr/0007-licensing.md).
+You may deploy and build on Atlas commercially, including alongside proprietary
+code. Modifications to Atlas itself stay open if you distribute them. LGPL rather
+than AGPL is deliberate — reasoning in [ADR-0007](docs/adr/0007-licensing.md).
 
-Odoo is a trademark of Odoo S.A. This project is not affiliated with or endorsed by
-Odoo S.A.
+Odoo is a trademark of Odoo S.A. This project is not affiliated with Odoo S.A.
