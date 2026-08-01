@@ -1,0 +1,45 @@
+# Keep the build context small and free of anything secret.
+# Everything here is either irrelevant to an image build or must never enter one.
+
+.git/
+.github/
+.venv/
+venv/
+
+# Secrets — belt and braces alongside .gitignore.
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+
+# Caches and build output
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+node_modules/
+
+# Local infrastructure state
+data/
+docker-compose.override.yml
+
+# Documentation and editor noise — never needed at build time
+docs/
+*.md
+!services/atlas/README.md
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+scratch/
+tmp/

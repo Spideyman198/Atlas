@@ -1,0 +1,6 @@
+# The Odoo addon path.
+#
+# `odoo_atlas` lands here in M5. This directory is bind-mounted read-only into the
+# Odoo container at /mnt/extra-addons (see docker-compose.yml), so it must exist
+# before the stack starts — otherwise Docker creates it as a root-owned directory
+# on Linux hosts.
