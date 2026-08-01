@@ -1,0 +1,121 @@
+name: CI
+
+# Runs on every pull request and on pushes to main. Nothing here needs a secret,
+# an API key or a network call to a model provider — the engine is designed so
+# its test suite runs entirely offline (ADR-0005).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: this workflow only reads the repository.
+permissions:
+  contents: read
+
+# A new push to the same branch cancels the previous run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  quality:
+    name: Lint and type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: services/atlas/pyproject.toml
+
+      - name: Install the engine and its toolchain
+        run: pip install -e "services/atlas[dev]"
+
+      - name: ruff (lint)
+        run: ruff check --output-format=github .
+
+      - name: ruff (format)
+        run: ruff format --check .
+
+      - name: mypy (strict)
+        run: mypy
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: services/atlas/pyproject.toml
+
+      - name: Install the engine and its toolchain
+        run: pip install -e "services/atlas[dev]"
+
+      - name: pytest
+        run: pytest -m unit --cov --cov-report=term-missing --cov-report=xml --junitxml=junit.xml
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.sha }}
+          path: |
+            coverage.xml
+            junit.xml
+          retention-days: 14
+
+  images:
+    name: Container images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate the compose file
+        # Catches interpolation errors and schema mistakes before anyone runs it.
+        run: docker compose --env-file .env.example config --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the engine image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/atlas/Dockerfile
+          target: runtime
+          push: false
+          load: true
+          tags: odoo-atlas/atlas:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify the image starts and answers liveness
+        run: |
+          docker run --rm --detach --name atlas-ci \
+            --env ATLAS_DATABASE_URL=postgresql://atlas:atlas@127.0.0.1:5432/atlas \
+            --publish 8000:8000 odoo-atlas/atlas:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/healthz; then
+              echo "" && echo "liveness ok after ${attempt}s" && exit 0
+            fi
+            sleep 1
+          done
+          echo "engine did not become live" >&2
+          docker logs atlas-ci >&2
+          exit 1
+
+      - name: Collect engine logs on failure
+        if: failure()
+        run: docker logs atlas-ci || true
+
+      - name: Stop the container
+        if: always()
+        run: docker rm --force atlas-ci || true
