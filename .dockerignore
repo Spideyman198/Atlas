@@ -6,7 +6,8 @@
 .venv/
 venv/
 
-# Secrets — belt and braces alongside .gitignore.
+# Secrets. Duplicated from .gitignore because build context and git tracking are
+# independent: an ignored file still enters the image without this.
 .env
 .env.*
 !.env.example

@@ -4,19 +4,17 @@ M1 scope is deliberately narrow: the operational probes that prove the deploymen
 topology of ``docs/adr/0002-sidecar-service-topology.md`` actually stands up. The
 domain, application and infrastructure layers arrive in M2.
 
-The two probes answer different questions, and conflating them is a common and
-expensive mistake:
+The two probes answer different questions:
 
-``/healthz`` — **liveness**. "Is this process alive?" It touches nothing external.
-    A failing liveness probe makes an orchestrator *restart* the container, so
-    wiring it to PostgreSQL would turn a brief database blip into a rolling
-    restart storm across every replica.
+``/healthz`` — liveness. Is this process alive? It touches nothing external. A
+    failing liveness probe makes an orchestrator restart the container, so wiring
+    it to PostgreSQL would turn a brief database outage into a rolling restart
+    across every replica.
 
-``/readyz`` — **readiness**. "Should this process receive traffic?" It verifies
-    the Atlas database is reachable and that pgvector is present at the version
-    ``docs/adr/0004-vector-store-and-index-strategy.md`` requires. A failing
-    readiness probe removes the instance from rotation *without* killing it, so
-    it can recover on its own.
+``/readyz`` — readiness. Should this process receive traffic? It verifies the Atlas
+    database is reachable and that pgvector meets the minimum version required by
+    ``docs/adr/0004-vector-store-and-index-strategy.md``. A failing readiness probe
+    removes the instance from rotation without killing it, so it can recover.
 """
 
 from __future__ import annotations

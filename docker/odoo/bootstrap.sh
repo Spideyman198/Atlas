@@ -3,12 +3,11 @@
 # Initialises the Odoo database on first boot, then hands control to the
 # official Odoo entrypoint.
 #
-# Without this, `docker compose up` drops the user on Odoo's database-manager
-# page and the stack is not actually usable until someone clicks through a form.
-# The whole point of M1 is that one command yields a working system.
+# Without this, `docker compose up` leaves the user on Odoo's database-manager page
+# and the stack is not usable until someone completes a form.
 #
-# Idempotent: on every subsequent start this costs one query against
-# pg_database and then execs straight through.
+# Idempotent: on every subsequent start this costs one query against pg_database
+# and then execs straight through.
 # ---------------------------------------------------------------------------
 set -euo pipefail
 

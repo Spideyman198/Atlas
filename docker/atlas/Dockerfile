@@ -59,8 +59,7 @@ ENV PATH="/opt/venv/bin:${PATH}" \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONFAULTHANDLER=1
 
-# Run as an unprivileged user. A container that does not need root should not
-# have it, and this is far cheaper to do now than to retrofit.
+# Run as an unprivileged user.
 RUN groupadd --system --gid 1001 atlas \
  && useradd  --system --uid 1001 --gid atlas --create-home --shell /usr/sbin/nologin atlas
 

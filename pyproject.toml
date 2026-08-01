@@ -126,8 +126,7 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-# Ratcheted upward each milestone as the engine grows; M14 gates the pipeline
-# at 85%. Lowering this number is a reviewable decision, never a quick fix.
+# Raised as the engine grows; M14 gates the pipeline at 85%.
 fail_under = 70
 exclude_lines = [
     "pragma: no cover",
