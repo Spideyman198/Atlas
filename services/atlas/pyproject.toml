@@ -1,0 +1,51 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "atlas"
+version = "0.1.0"
+description = "Odoo Atlas engine — retrieval, orchestration and generation for the Odoo Atlas copilot."
+readme = "README.md"
+license = "LGPL-3.0-or-later"
+requires-python = ">=3.12,<3.13"
+authors = [{ name = "Odoo Atlas contributors" }]
+keywords = ["odoo", "rag", "llamaindex", "pgvector", "erp", "ai"]
+classifiers = [
+    "Private :: Do Not Upload",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: FastAPI",
+]
+
+# Exact pins, deliberately. Reproducible builds matter more than automatic
+# upgrades for a service that ships as a container image. A lock file with
+# hashes lands in M14; until then, pyproject is the single source of truth.
+#
+# Dependencies are added per milestone rather than up front:
+#   M3  anthropic, openai, voyageai, tenacity, tiktoken
+#   M4  sqlalchemy, alembic, pgvector
+#   M7  llama-index-core, llama-index-readers-file
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.52.1",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
+    "psycopg[binary,pool]==3.3.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    # Starlette's TestClient requires httpx2; using the legacy httpx package
+    # raises StarletteDeprecationWarning, which `filterwarnings = ["error"]`
+    # correctly refuses to tolerate.
+    "httpx2==2.9.1",
+    "ruff==0.16.1",
+    "mypy==2.3.0",
+    "import-linter==2.13",
+    "pre-commit==4.4.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/atlas"]
