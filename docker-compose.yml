@@ -1,0 +1,137 @@
+# ---------------------------------------------------------------------------
+# Odoo Atlas — local development stack.
+#
+# Three services, one PostgreSQL cluster with two logical databases:
+#   postgres    PostgreSQL 17 + pgvector 0.8   → databases `odoo` and `atlas`
+#   odoo        Odoo 19 CE + the odoo_atlas addon (mounted from ./addons)
+#   atlas-api   The retrieval/orchestration engine (FastAPI)
+#
+# The engine runs beside Odoo rather than inside it — see ADR-0002. The
+# `atlas-worker` service joins this file in M7, when its entrypoint exists.
+#
+# This file is development-oriented: source is bind-mounted for live reload and
+# ports are published to the host. A hardened production overlay ships in M14.
+# ---------------------------------------------------------------------------
+name: odoo-atlas
+
+x-atlas-environment: &atlas-environment
+  ATLAS_ENV: ${ATLAS_ENV:-development}
+  ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-INFO}
+  ATLAS_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${ATLAS_DB_NAME:-atlas}
+  # Bind-mounted source takes precedence over the wheel baked into the image.
+  # Removing this variable makes the container run purely from the image.
+  PYTHONPATH: /app/src
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.6-pg17-bookworm
+    container_name: atlas-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required — copy .env.example to .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: postgres
+      POSTGRES_INITDB_ARGS: --encoding=UTF8
+      # Consumed by our init script, not by the postgres image itself.
+      ATLAS_DB_NAME: ${ATLAS_DB_NAME:-atlas}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Runs exactly once, on first cluster initialisation.
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Loopback only: convenient for psql and GUI clients, invisible to the LAN.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  odoo:
+    build:
+      context: .
+      dockerfile: docker/odoo/Dockerfile
+    image: odoo-atlas/odoo:dev
+    container_name: atlas-odoo
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # These four names are dictated by the official Odoo entrypoint.
+      HOST: postgres
+      PORT: 5432
+      USER: ${POSTGRES_USER}
+      PASSWORD: ${POSTGRES_PASSWORD}
+      # Consumed by our bootstrap wrapper (docker/odoo/bootstrap.sh).
+      ODOO_DB_NAME: ${ODOO_DB_NAME:-odoo}
+      ODOO_INIT_MODULES: ${ODOO_INIT_MODULES:-base}
+      ODOO_LOAD_DEMO_DATA: ${ODOO_LOAD_DEMO_DATA:-true}
+    volumes:
+      - odoo-filestore:/var/lib/odoo
+      # The addon lands here in M5. Read-only: Odoo must never write to source.
+      - ./addons:/mnt/extra-addons:ro
+      - ./docker/odoo/odoo.conf:/etc/odoo/odoo.conf:ro
+    ports:
+      - "${ODOO_PORT:-8069}:8069"
+    healthcheck:
+      # /web/health needs no database, so this reports the server itself.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8069/web/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  atlas-api:
+    build:
+      context: .
+      dockerfile: docker/atlas/Dockerfile
+      target: runtime
+    image: odoo-atlas/atlas:dev
+    container_name: atlas-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *atlas-environment
+    volumes:
+      # Development only — see PYTHONPATH above.
+      - ./services/atlas/src:/app/src:ro
+    command:
+      - uvicorn
+      - atlas.interfaces.http.app:app
+      - --host=0.0.0.0
+      - --port=8000
+      - --reload
+      - --reload-dir=/app/src
+    ports:
+      # Loopback only. The engine is an internal service (ADR-0002); the Odoo
+      # container reaches it over the compose network as http://atlas-api:8000.
+      - "127.0.0.1:${ATLAS_API_PORT:-8000}:8000"
+
+  # Lint, type-check and test runner. Started only via `--profile tools`, so it
+  # never runs as part of the stack. Exists so contributors need no local Python
+  # interpreter — see docker/atlas/Dockerfile, stage `dev`.
+  atlas-tools:
+    build:
+      context: .
+      dockerfile: docker/atlas/Dockerfile
+      target: dev
+    image: odoo-atlas/atlas:tools
+    profiles: ["tools"]
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    environment:
+      # Unit tests need no database; this satisfies fail-fast settings validation
+      # for the handful of tests that construct Settings.
+      ATLAS_DATABASE_URL: postgresql://atlas:atlas@postgres:5432/atlas
+    entrypoint: []
+    command: ["pytest"]
+
+volumes:
+  postgres-data:
+    name: odoo-atlas-postgres-data
+  odoo-filestore:
+    name: odoo-atlas-odoo-filestore
