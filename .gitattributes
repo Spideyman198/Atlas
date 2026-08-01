@@ -1,0 +1,23 @@
+# Normalise line endings so a Windows workstation and a Linux container agree.
+# Without this, files authored on Windows arrive in the Odoo/Atlas images with
+# CRLF endings and shell scripts fail with `bad interpreter: /bin/sh^M`.
+* text=auto eol=lf
+
+# Windows-native tooling must keep CRLF.
+*.ps1   text eol=crlf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# Binary assets: never diff, never munge.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+
+# Keep generated/vendored files out of language statistics and diffs.
+docs/assets/**      linguist-documentation
+*.lock              linguist-generated=true -diff

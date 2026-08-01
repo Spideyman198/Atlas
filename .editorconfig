@@ -1,0 +1,32 @@
+# https://editorconfig.org
+# One source of truth for whitespace, honoured by VS Code, PyCharm, Vim, and ruff.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json,toml}]
+indent_size = 2
+
+# Odoo view definitions and OWL templates.
+[*.xml]
+indent_size = 4
+
+[*.{js,ts,scss,css}]
+indent_size = 4
+
+[*.md]
+indent_size = 2
+# Markdown uses two trailing spaces as a hard line break.
+trim_trailing_whitespace = false
+
+[Makefile]
+indent_style = tab
+
+[*.{ps1,bat,cmd}]
+end_of_line = crlf

@@ -1,0 +1,89 @@
+# ---------------------------------------------------------------------------
+# Secrets — nothing in this block may ever reach the remote.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+.secrets.baseline.local
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.installed.cfg
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test / typing / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+junit.xml
+report.html
+
+# ---------------------------------------------------------------------------
+# Odoo
+# ---------------------------------------------------------------------------
+# Filestore, sessions and session-scoped data written by the Odoo container.
+.odoo/
+data/odoo/
+odoo.conf.local
+*.odoo.log
+# Compiled web assets Odoo regenerates on boot.
+addons/**/static/description/index.html.bak
+
+# ---------------------------------------------------------------------------
+# Docker / local infrastructure state
+# ---------------------------------------------------------------------------
+data/postgres/
+docker-compose.override.yml
+
+# ---------------------------------------------------------------------------
+# Node (OWL / frontend tooling introduced at M11)
+# ---------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# ---------------------------------------------------------------------------
+# Editors & OS
+# ---------------------------------------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------------
+# Local scratch — deliberately available for throwaway work.
+# ---------------------------------------------------------------------------
+scratch/
+tmp/
+*.local.*
