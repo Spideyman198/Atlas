@@ -97,7 +97,7 @@ here.
 
 ## Consequences
 
-**Easier**
+### Benefits
 
 - One stateful service for the whole product. `docker compose up` gives a reviewer a
   working system.
@@ -107,7 +107,7 @@ here.
 - SQL is the query language, so retrieval is debuggable with `psql` and `EXPLAIN
   ANALYZE` — which is exactly what M13's performance work needs.
 
-**Harder**
+### Costs
 
 - **We must run a pgvector-enabled PostgreSQL image.** The stock `postgres` image
   does not include the extension. Handled in M1 with `pgvector/pgvector:pg17`.

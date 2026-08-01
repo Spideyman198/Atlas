@@ -4,17 +4,15 @@
 - **Date:** 2026-08-02
 - **Deciders:** Core team
 
-> **Revision note.** The first draft of this ADR proposed owning the RAG
-> orchestration outright, with no general-purpose framework in the codebase. It was
-> flagged at M0 review as the one decision requiring explicit sign-off, and it was
-> **rejected**. This document records the decision that was actually accepted. The
-> original proposal is preserved below under *Alternatives considered* — the
-> reasoning that lost is part of the record, and one of its objections directly
-> shaped the design that won (see *The inversion*).
->
-> Per [ADR-0001](0001-record-architecture-decisions.md), a *rejected proposal* is
-> amended; an *accepted decision* is superseded. From M1 onward, changes to accepted
-> ADRs get a new numbered record.
+Revision note: the first draft of this ADR proposed owning the retrieval
+orchestration outright, with no general-purpose framework in the codebase. It was
+rejected at M0 review. This document records the decision that was accepted; the
+original proposal is kept below under "Alternatives considered", because one of its
+objections shaped the design that replaced it (see "The inversion").
+
+Per [ADR-0001](0001-record-architecture-decisions.md), a rejected proposal is
+amended and an accepted decision is superseded. From M1 onward, changes to accepted
+ADRs get a new numbered record.
 
 ## Context
 
@@ -26,10 +24,8 @@ Two forces pull in opposite directions.
 LlamaIndex ships node parsers, a reader ecosystem, an ingestion pipeline with
 content-hash deduplication, `QueryFusionRetriever` (reciprocal rank fusion built
 in), auto-merging and sentence-window retrieval, and reranker integrations. Writing
-all of that ourselves is real work with real bugs, and the result would be a
-private reimplementation that no new contributor recognises. It is also a framework
-that reviewers and hiring managers know by name — which matters for a project whose
-audience includes them.
+all of that ourselves is real work with real bugs, and the result would be a private
+reimplementation that no new contributor recognises.
 
 **Away from a framework.** Atlas has one requirement that no RAG framework
 accommodates: **per-request authorization** ([ADR-0006](0006-data-access-and-authorization.md)).
@@ -159,7 +155,7 @@ been violated.
 
 ## Consequences
 
-**Easier**
+### Benefits
 
 - **Less code to write and own.** Node parsers, fusion retrieval, reranking and
   ingestion orchestration come from a maintained library instead of ~800–1,200 lines
@@ -173,7 +169,7 @@ been violated.
 - **Upstream improvements arrive for free**, including retrieval-quality work we
   would not have prioritised.
 
-**Harder**
+### Costs
 
 - **The bridge tax.** Three adapter classes (`AtlasLlamaLLM`, `AtlasLlamaEmbedding`,
   `AtlasLlamaVectorStore`) totalling roughly 200–300 lines that a
@@ -199,13 +195,11 @@ been violated.
   | `CandidateChunk` | `NodeWithScore` | `llamaindex/retriever.py` |
   | `ChatRequest` / `ChatResponse` | `ChatMessage` / `CompletionResponse` | `llamaindex/bridges.py` |
 
-- **Constant temptation to leak.** Importing `NodeWithScore` in a use case "just this
-  once" is the failure mode that kills this design. `import-linter` fails the build;
-  that is the intended feedback, not an obstacle to route around.
+- **Leakage.** Importing `NodeWithScore` into a use case is the failure mode that
+  undoes this design. `import-linter` fails the build when it happens.
 - **Two instrumentation systems.** LlamaIndex has its own callback and
-  instrumentation stack. Policy: **our port-level decorators are authoritative** for
-  metrics, cost and tracing; LlamaIndex instrumentation is enabled only for local
-  debugging, never in production telemetry.
+  instrumentation stack. Our port-level decorators are authoritative for metrics,
+  cost and tracing; LlamaIndex instrumentation is enabled only for local debugging.
 
 ## Alternatives considered
 

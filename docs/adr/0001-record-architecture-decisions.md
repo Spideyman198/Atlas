@@ -19,9 +19,8 @@ consequences. A choice that looks like an implementation detail to the AI side
 (*"we'll just query the Odoo tables directly"*) is a security incident to the ERP
 side.
 
-We also expect this repository to be read by people who did not write it —
-reviewers, contributors, and hiring managers. Code shows *what*; it rarely shows
-*why not*.
+The repository will also be read by people who did not write it. Code shows what a
+system does; it rarely shows what was rejected on the way there, or why.
 
 ## Decision
 
@@ -43,16 +42,16 @@ use — do **not** get an ADR. They get a code review.
 
 ## Consequences
 
-**Easier**
+### Benefits
 
 - Onboarding: a new contributor reads seven documents and understands the system's
   constraints, not just its shape.
 - Code review: reviewers can challenge a decision on its recorded reasoning rather
   than on taste.
 - Refactoring: when we revisit a choice, we can check whether the original forces
-  still apply. Often they do not, and the ADR tells us so.
+  still apply. Often they do not, and the ADR says so.
 
-**Harder**
+### Costs
 
 - Every significant PR carries a documentation cost. This is deliberate friction:
   if writing the ADR is hard, the decision is probably not understood well enough

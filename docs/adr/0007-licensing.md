@@ -55,7 +55,7 @@ of LGPL-3.0 code; we cannot relicense it permissively.
 
 ## Consequences
 
-**Easier**
+### Benefits
 
 - Unambiguous compatibility with Odoo CE and with the Odoo App Store's Community
   requirements.
@@ -64,7 +64,7 @@ of LGPL-3.0 code; we cannot relicense it permissively.
 - Contributors know exactly what they are agreeing to; no CLA needed for an
   inbound=outbound LGPL project.
 
-**Harder**
+### Costs
 
 - **Dependency licences must stay compatible.** Anything GPL-3.0-only or AGPL pulled
   into the service would force the whole work up to that licence. M14 adds a CI

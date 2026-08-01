@@ -6,10 +6,6 @@
 
 ## Context
 
-This is the most consequential decision in the project. Everything else is
-engineering taste; this one is the difference between a deployable product and a
-data breach.
-
 Odoo enforces access control in three layers:
 
 1. **Groups** (`res.groups`) — what a user is.
@@ -124,7 +120,7 @@ addon, not over raw XML-RPC and not over direct SQL.
 
 ## Consequences
 
-**Easier**
+### Benefits
 
 - The security story is one sentence a CISO accepts: *"the assistant can never
   surface a record the user could not open in the Odoo UI."*
@@ -135,7 +131,7 @@ addon, not over raw XML-RPC and not over direct SQL.
 - The audit log makes the system defensible under review and satisfies GDPR-style
   "what did it access" questions.
 
-**Harder**
+### Costs
 
 - **Latency.** Stage 2 adds an Odoo round-trip per query, grouped by model.
   Budgeted at 20–60 ms against a multi-second LLM call. Mitigated by batching ids

@@ -74,7 +74,7 @@ call back for authorization decisions (see [ADR-0006](0006-data-access-and-autho
 
 ## Consequences
 
-**Easier**
+### Benefits
 
 - The AI stack upgrades on its own cadence. An Odoo 19 → 20 migration touches the
   addon only.
@@ -86,7 +86,7 @@ call back for authorization decisions (see [ADR-0006](0006-data-access-and-autho
   calls, which a pre-forked Odoo worker never could.
 - Streaming responses (SSE) are natural in FastAPI and awkward in Odoo's WSGI stack.
 
-**Harder**
+### Costs
 
 - **Two services to operate.** Mitigated by shipping a single `docker-compose.yml`
   that brings the whole system up with one command (M1), and by a `/healthz`

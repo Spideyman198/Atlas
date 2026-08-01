@@ -83,7 +83,7 @@ SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';
 
 ## What gets created
 
-**Containers**
+### Containers
 
 | Name | Image | Role |
 | --- | --- | --- |
@@ -91,14 +91,18 @@ SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';
 | `atlas-odoo` | built from `docker/odoo/Dockerfile` | Odoo 19 CE |
 | `atlas-api` | built from `docker/atlas/Dockerfile` | The engine |
 
-**Databases** — one cluster, two logical databases ([ADR-0004](adr/0004-vector-store-and-index-strategy.md)):
+### Databases
+
+One cluster, two logical databases ([ADR-0004](adr/0004-vector-store-and-index-strategy.md)):
 
 - `odoo` — created by Odoo on first boot; the ERP system of record.
 - `atlas` — created by `docker/postgres/initdb/`, with the `vector` extension
   enabled. Empty until M4 adds the schema.
 
-**Volumes** — `odoo-atlas-postgres-data` and `odoo-atlas-odoo-filestore`. They
-survive `make down`. Only `make clean` removes them.
+### Volumes
+
+`odoo-atlas-postgres-data` and `odoo-atlas-odoo-filestore` survive `make down`. Only
+`make clean` removes them.
 
 ## Everyday commands
 
@@ -132,8 +136,8 @@ are most likely to change:
 Model provider keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `VOYAGE_API_KEY`) are
 present but unused until M3.
 
-> **`.env` is git-ignored and must stay that way.** It is the only file in the
-> repository that will ever hold a secret.
+`.env` is git-ignored and must stay that way. It is the only file in the repository
+that will ever hold a secret.
 
 ## Troubleshooting
 

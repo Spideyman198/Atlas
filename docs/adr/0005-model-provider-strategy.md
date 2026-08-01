@@ -112,7 +112,7 @@ Therefore:
 
 ## Consequences
 
-**Easier**
+### Benefits
 
 - Deployments choose their vendor without a fork. Air-gapped installs get a path.
 - Adding a provider is one class plus a contract-test registration.
@@ -120,7 +120,7 @@ Therefore:
   which is what makes the M12 evaluation harness reproducible.
 - Cost and token accounting are uniform and free at the call site.
 
-**Harder**
+### Costs
 
 - **We maintain a translation layer**, and vendor features that do not generalise
   (extended thinking, prompt caching, structured outputs) need deliberate exposure

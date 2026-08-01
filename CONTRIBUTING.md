@@ -1,41 +1,42 @@
 # Contributing to Odoo Atlas
 
-Thanks for considering a contribution. This document is the short version of "how we
-work here" — read it before opening your first pull request.
+Read this before opening your first pull request.
 
 ## Ground rules
 
-1. **Significant decisions need an ADR.** If your change alters deployment topology,
-   the security model, the database schema, a hard-to-remove dependency, or a public
-   contract, it ships with a new record in [`docs/adr/`](docs/adr/README.md). This is
-   the one rule we do not bend. See
-   [ADR-0001](docs/adr/0001-record-architecture-decisions.md) for what counts.
-2. **The layering is enforced, not suggested.** `domain` imports nothing from the
+1. Significant decisions need an ADR. If your change alters deployment topology, the
+   security model, the database schema, a hard-to-remove dependency or a public
+   contract, it ships with a new record in [`docs/adr/`](docs/adr/README.md).
+   [ADR-0001](docs/adr/0001-record-architecture-decisions.md) defines what counts.
+2. The layering is enforced by CI, not by review. `domain` imports nothing from the
    rest of `atlas`. `application` depends on ports, never on adapters. Nothing in
-   `services/atlas` imports `odoo`. `import-linter` fails the build if you break
-   these — that is the intended feedback, not an obstacle to route around.
-3. **`sudo()` is prohibited in the Atlas request path.** Every read performed on
-   behalf of a user runs as that user, so Odoo's record rules apply. If you think you
-   need `sudo()`, you have found a design problem — open an issue.
-4. **Tests are part of the change.** Bug fixes come with a regression test. Features
-   come with unit tests, and integration tests if they cross a boundary.
+   `services/atlas` imports `odoo`. Nothing outside
+   `atlas.infrastructure.llamaindex` imports `llama_index`. `import-linter` fails the
+   build if you break any of these.
+3. `sudo()` is prohibited in the Atlas request path. Every read performed on behalf
+   of a user runs as that user, so Odoo's record rules apply. If you need `sudo()`,
+   open an issue — it points at a design problem.
+4. Tests are part of the change. Bug fixes come with a regression test. Features come
+   with unit tests, and integration tests if they cross a boundary.
 
 ## Getting set up
 
-> Full instructions land in `docs/installation.md` with M1. Until then:
+See [docs/installation.md](docs/installation.md) for full instructions. In short:
 
 ```bash
-git clone https://github.com/<your-account>/odoo-atlas.git
-cd odoo-atlas
-cp .env.example .env      # add your provider API key
-make up                   # Odoo + PostgreSQL/pgvector + atlas-api + atlas-worker
-make test
+git clone https://github.com/Spideyman198/Atlas.git
+cd Atlas
+make init
+make up
+make check
 ```
 
-**Python version.** The engine targets **Python 3.12** — the version in the runtime
-image. Newer interpreters may lack wheels for parts of the stack. If your system
-Python differs, develop inside the containers (`make shell`) or use a 3.12 virtual
-environment; do not "fix" a dependency failure by loosening a version pin.
+On Windows, use `.\make.ps1 <target>`.
+
+The engine targets Python 3.12, the version in the runtime image. Newer interpreters
+may lack wheels for parts of the stack. `make check` and `make test` run in a
+container, so no local interpreter is required; if you do work outside one, use a
+3.12 environment rather than loosening a version pin.
 
 ## Workflow
 
@@ -99,7 +100,7 @@ docs(adr): record decision to run the engine as a sidecar service
 
 ## Code standards
 
-**Python**
+### Python
 
 - Formatted and linted by `ruff`; configuration in the root `pyproject.toml` is
   authoritative. Do not hand-format.
@@ -111,7 +112,7 @@ docs(adr): record decision to run the engine as a sidecar service
 - Errors are typed exceptions from our taxonomy, never bare `Exception`.
 - No I/O in `domain`. None. Not even logging.
 
-**Odoo addon**
+### Odoo addon
 
 - Follow the [Odoo coding guidelines](https://www.odoo.com/documentation/19.0/contributing/development/coding_guidelines.html).
 - Model fields declared in a consistent order: fields, compute methods, constraints,
@@ -122,7 +123,7 @@ docs(adr): record decision to run the engine as a sidecar service
   `<model_snake_case>_action`.
 - Never `sudo()` in the Atlas request path (see ground rule 3).
 
-**Testing**
+### Testing
 
 | Kind | Location | Speed | Rule |
 | --- | --- | --- | --- |

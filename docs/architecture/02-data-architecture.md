@@ -115,7 +115,7 @@ erDiagram
     }
 ```
 
-**Design notes worth defending in review:**
+Notes on the design:
 
 - **`documents` vs `chunks` is a real distinction, not bookkeeping.** A document is
   the unit of *ingestion and invalidation* (one sales order, one PDF). A chunk is the
