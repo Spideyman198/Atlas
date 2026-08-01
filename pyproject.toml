@@ -1,0 +1,137 @@
+# ---------------------------------------------------------------------------
+# Repository-level tooling configuration.
+#
+# This file defines NO package. It is the single source of truth for lint, type,
+# test and coverage settings across both Python trees in the monorepo:
+#
+#   services/atlas/   the engine   — strict typing, full lint set
+#   addons/           the Odoo addon (M5) — Odoo's own conventions, relaxed rules
+#
+# The engine's own package metadata and dependencies live in
+# services/atlas/pyproject.toml.
+# ---------------------------------------------------------------------------
+
+# =========================== ruff (lint + format) ==========================
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["services/atlas/src", "services/atlas/tests"]
+extend-exclude = [".venv", "addons/*/migrations"]
+
+[tool.ruff.lint]
+select = [
+    "F",     # pyflakes
+    "E", "W",# pycodestyle
+    "I",     # isort
+    "N",     # pep8-naming
+    "D",     # pydocstyle
+    "UP",    # pyupgrade
+    "ANN",   # flake8-annotations
+    "ASYNC", # flake8-async
+    "S",     # flake8-bandit
+    "BLE",   # flake8-blind-except
+    "B",     # flake8-bugbear
+    "A",     # flake8-builtins
+    "C4",    # flake8-comprehensions
+    "DTZ",   # flake8-datetimez — naive datetimes are a bug magnet in an ERP
+    "T20",   # flake8-print — logging, not print()
+    "EM",    # flake8-errmsg
+    "ISC",   # flake8-implicit-str-concat
+    "ICN",   # flake8-import-conventions
+    "G",     # flake8-logging-format
+    "PIE",   # flake8-pie
+    "PT",    # flake8-pytest-style
+    "RET",   # flake8-return
+    "SIM",   # flake8-simplify
+    "TID",   # flake8-tidy-imports
+    "ARG",   # flake8-unused-arguments
+    "PTH",   # flake8-use-pathlib
+    "ERA",   # eradicate — commented-out code
+    "PL",    # pylint
+    "TRY",   # tryceratops
+    "RUF",   # ruff-specific
+]
+ignore = [
+    "D203",   # conflicts with D211; we use D211 (no blank line before class docstring)
+    "D213",   # conflicts with D212; we use D212 (summary on the first line)
+    "COM812", # trailing-comma rules fight the formatter
+    "ISC001", # implicit string concat rule fights the formatter
+    "TRY003", # long messages inside raise are fine and more readable than constants
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert and use magic numbers freely. `D1` (missing-docstring) is off
+# because a well-named test function is its own documentation — docstrings are
+# still used where a test needs to explain *why*, just never mandated.
+"services/atlas/tests/**" = ["S101", "PLR2004", "D1", "ARG001"]
+# Odoo addons follow Odoo's conventions, not ours: field definitions are mutable
+# class attributes by design, and the framework supplies most docstring context.
+"addons/**" = ["D", "ANN", "RUF012", "A003", "PLR0913"]
+# An Odoo manifest is a bare dict literal at module level.
+"addons/**/__manifest__.py" = ["B018"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["atlas"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ================================== mypy ===================================
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "services/atlas/src"
+files = ["services/atlas/src", "services/atlas/tests"]
+strict = true
+warn_unreachable = true
+show_error_codes = true
+pretty = true
+plugins = ["pydantic.mypy"]
+enable_error_code = [
+    "ignore-without-code",  # a bare `# type: ignore` hides the next real error
+    "redundant-expr",
+    "truthy-bool",
+    "possibly-undefined",
+]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# ================================= pytest ==================================
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["services/atlas/tests"]
+pythonpath = ["services/atlas/src"]
+addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
+markers = [
+    "unit: fast and isolated — no network, no database, no API key",
+    "integration: requires a real PostgreSQL instance",
+    "contract: asserts every adapter of a port behaves identically",
+    "slow: takes longer than a second",
+]
+filterwarnings = ["error"]
+
+# ================================ coverage =================================
+[tool.coverage.run]
+source = ["services/atlas/src/atlas"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+# Ratcheted upward each milestone as the engine grows; M14 gates the pipeline
+# at 85%. Lowering this number is a reviewable decision, never a quick fix.
+fail_under = 70
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]

@@ -1,0 +1,48 @@
+# ---------------------------------------------------------------------------
+# Pre-commit hooks.
+#
+#   pip install pre-commit && pre-commit install
+#   pre-commit autoupdate      # pin every hook to its current release
+#   pre-commit run --all-files
+#
+# Scope is deliberate: only checks that are FAST and need no project
+# dependencies run here. mypy is absent on purpose — it needs the engine's full
+# dependency set to say anything useful, and duplicating those pins into
+# `additional_dependencies` creates a second source of truth that silently rots.
+# Type checking runs in CI and via `make type`, where the real environment exists.
+# ---------------------------------------------------------------------------
+default_install_hook_types: [pre-commit, commit-msg]
+fail_fast: false
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: \.md$          # two trailing spaces is a Markdown line break
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-case-conflict  # Windows and macOS are case-insensitive; Linux is not
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.1
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # Secrets must never reach a remote, and a portfolio repository is public by
+  # intent. This scans the diff, not just the working tree.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
