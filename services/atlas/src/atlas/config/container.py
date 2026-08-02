@@ -20,6 +20,8 @@ from atlas.config.providers import build_providers
 from atlas.config.settings import Settings, get_settings
 from atlas.domain.ports.chat import ChatProvider
 from atlas.domain.ports.embedding import EmbeddingProvider
+from atlas.domain.ports.vector_store import VectorStore
+from atlas.infrastructure.persistence import PgVectorStore, register_vector
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,11 @@ class Container:
         """The configured embedding provider."""
         return self._embedding
 
+    @property
+    def vector_store(self) -> VectorStore:
+        """The corpus store, over the same pool."""
+        return PgVectorStore(self._pool)
+
     @classmethod
     async def create(cls, settings: Settings | None = None) -> Self:
         """Build the container and open its resources.
@@ -86,6 +93,9 @@ class Container:
             max_size=database.pool_max_size,
             timeout=database.connect_timeout_seconds,
             open=False,
+            # Every connection learns the `vector` type, so embeddings bind as
+            # parameters instead of being formatted into query text.
+            configure=register_vector,
         )
         await pool.open(wait=False)
 

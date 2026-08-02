@@ -100,12 +100,35 @@ async def readyz(request: Request) -> JSONResponse:
         else:
             checks["database"] = "ok"
             checks["pgvector"] = _describe_pgvector(row[0] if row else None)
+            checks["schema"] = await _describe_schema(container)
 
-    ready = checks.get("database") == "ok" and checks.get("pgvector", "").startswith("ok")
+    ready = (
+        checks.get("database") == "ok"
+        and checks.get("pgvector", "").startswith("ok")
+        and checks.get("schema", "").startswith("ok")
+    )
     return JSONResponse(
         status_code=200 if ready else 503,
         content={"status": "ready" if ready else "not_ready", "checks": checks},
     )
+
+
+async def _describe_schema(container: Container) -> str:
+    """Compare the migrated vector width against the configured embedding model.
+
+    A mismatch means the corpus and the model disagree, which produces silently
+    wrong retrieval rather than an error. Reporting it as not-ready keeps the
+    instance out of rotation until a re-index has run (ADR-0005).
+    """
+    configured = container.settings.embedding.dimensions
+    try:
+        actual = await container.vector_store.embedding_dimensions()
+    except Exception as exc:  # noqa: BLE001 - a readiness probe must never raise
+        return f"unavailable: {type(exc).__name__}"
+
+    if actual != configured:
+        return f"mismatch: schema is {actual}-d, embedding model is {configured}-d"
+    return f"ok ({actual}-d)"
 
 
 def _describe_pgvector(extension_version: str | None) -> str:
