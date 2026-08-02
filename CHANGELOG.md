@@ -10,6 +10,26 @@ keys — may change between milestones. Breaking changes are called out explicit
 
 ### Added
 
+Provider ports and resilience (M3a):
+
+- `ChatProvider` and `EmbeddingProvider` ports, with the domain vocabulary they
+  speak: `Message`, `ToolDefinition`, `ToolCall`, `ToolResult`, `ChatRequest`,
+  `ChatResponse`, `ChatChunk`, `StopReason`, `Effort`, `TokenUsage`.
+- Shared contract test suites. An adapter subclasses the contract, supplies a
+  provider fixture, and inherits every assertion — substitutability is enforced
+  rather than assumed.
+- `FakeChatProvider` (scripted responses and errors, records requests) and
+  `HashEmbeddingProvider` (deterministic, L2-normalised vectors), so the suite
+  runs with no network, no API key and no cost.
+- Retry decorator: jittered exponential backoff, provider-supplied `retry-after`
+  taking precedence, a 30-second cap, and injectable sleep so tests exercise the
+  schedule without waiting. Non-retryable provider errors fail immediately.
+- Accounting decorator recording latency, token usage and estimated cost against
+  the request's `trace_id`.
+- Pricing table using `Decimal`. Anthropic cache multipliers are derived from the
+  input rate; an unpriced model raises `ConfigurationError` rather than reporting
+  a silent zero.
+
 Engine foundations (M2):
 
 - Layered package skeleton: `domain`, `application`, `infrastructure`,
@@ -72,6 +92,7 @@ Planning and architecture (M0):
 
 ### Changed
 
+- Coverage floor raised from 70% to 85% (M3a). Actual coverage is 90%.
 - The engine's database setting moved from `ATLAS_DATABASE_URL` to
   `ATLAS_DATABASE__URL` when settings were grouped by concern (M2). Deployments
   setting it directly must rename the variable; `docker-compose.yml` and CI are

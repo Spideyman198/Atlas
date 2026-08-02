@@ -8,7 +8,8 @@ can be reviewed on its own; none depends on a later milestone to make sense.
 | M0 | Project planning and architecture | Done |
 | M1 | Development environment and toolchain | Done |
 | M2 | Engine foundations | Done |
-| M3 | Provider abstraction layer | Planned |
+| M3a | Provider ports, fakes and resilience | Done |
+| M3b | Vendor adapters (Anthropic, OpenAI, Voyage) | Planned |
 | M4 | Vector store and persistence | Planned |
 | M5 | Odoo addon skeleton | Planned |
 | M6 | Odoo gateway and authorization | Planned |
@@ -73,17 +74,37 @@ Status: done.
 Acceptance: `mypy --strict` and `lint-imports` pass, and a deliberate violation is
 shown to break the relevant contract rather than pass silently.
 
-## M3 — Provider abstraction layer
+## M3a — Provider ports, fakes and resilience
 
-- `ChatProvider` and `EmbeddingProvider` ports
-- Adapters for Anthropic, OpenAI (including Azure via base-URL override) and Voyage
-- Decorators for retry with jittered backoff, timeout, circuit breaking, rate-limit
-  handling, and token and cost accounting
-- `FakeChatProvider` and `HashEmbeddingProvider` for offline tests
-- A shared contract test suite every adapter must pass
+Status: done.
 
-Acceptance: switching provider by environment variable changes no application code,
-and the full suite runs without network access or an API key.
+- `ChatProvider` and `EmbeddingProvider` ports, plus the domain vocabulary they
+  speak: messages, tool definitions and calls, stop reasons, effort, token usage
+- Shared contract test suites — subclass, supply a provider fixture, and the whole
+  suite runs against that adapter
+- `FakeChatProvider` (scripted, records requests) and `HashEmbeddingProvider`
+  (deterministic, L2-normalised) for offline tests
+- Retry decorator with jittered exponential backoff, provider-supplied
+  `retry-after`, a backoff cap, and injectable sleep for testing
+- Accounting decorator recording latency, token usage and estimated cost
+- Pricing table with Decimal arithmetic; an unpriced model raises rather than
+  reporting zero
+
+Acceptance: the suite runs with no network and no API key; decorators compose and
+preserve provider identity.
+
+## M3b — Vendor adapters
+
+- Anthropic adapter (`claude-opus-5` and siblings): adaptive thinking, effort,
+  tool calling, streaming, refusal handling
+- OpenAI adapter, including Azure via base-URL override
+- Voyage embedding adapter
+- Each registered against the M3a contract suites
+- Verified pricing for the OpenAI and Voyage entries
+- Provider settings and composition-root wiring
+
+Acceptance: switching provider by environment variable changes no application
+code, and every adapter passes the same contract suite.
 
 ## M4 — Vector store and persistence
 

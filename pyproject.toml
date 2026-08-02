@@ -74,6 +74,12 @@ ignore = [
     "EM101",   # raising a literal is fine when constructing a failure case
     "TRY301",  # ditto
 ]
+# Adapters implement documented ports. The contract — arguments, guarantees,
+# exceptions — is stated once on the Protocol in `atlas.domain.ports`; repeating
+# it on every implementation produces docstrings that restate the method name and
+# drift from the port they claim to describe. Docstrings are still used here
+# wherever an adapter has something of its own to explain.
+"services/atlas/src/atlas/infrastructure/**" = ["D102"]
 # Odoo addons follow Odoo's conventions, not ours: field definitions are mutable
 # class attributes by design, and the framework supplies most docstring context.
 "addons/**" = ["D", "ANN", "RUF012", "A003", "PLR0913"]
@@ -172,6 +178,9 @@ minversion = "9.0"
 testpaths = ["services/atlas/tests"]
 pythonpath = ["services/atlas/src"]
 addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
+# The engine is async throughout, so async test functions run without a per-test
+# marker. `--strict-markers` still applies to our own markers below.
+asyncio_mode = "auto"
 markers = [
     "unit: fast and isolated — no network, no database, no API key",
     "integration: requires a real PostgreSQL instance",
@@ -188,8 +197,8 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-# Raised as the engine grows; M14 gates the pipeline at 85%.
-fail_under = 70
+# Ratcheted as the engine grows: 70 at M1, 85 at M3. M14 gates the pipeline at 85.
+fail_under = 85
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
