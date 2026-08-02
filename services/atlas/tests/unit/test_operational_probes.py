@@ -16,11 +16,11 @@ pytestmark = pytest.mark.unit
 
 
 def test_healthz_answers_without_running_the_lifespan() -> None:
-    """Liveness must not depend on the connection pool or on settings.
+    """Liveness must not depend on the container or on settings.
 
-    Constructing ``TestClient`` without a ``with`` block deliberately skips the
-    lifespan, so no pool exists and ``get_settings()`` is never called. This is the
-    closest analogue to a container whose database is unreachable at boot.
+    Constructing ``TestClient`` without a ``with`` block skips the lifespan, so no
+    container exists and ``get_settings()`` is never called. This is the closest
+    analogue to a process whose database is unreachable at boot.
     """
     client = TestClient(create_app())
 
@@ -34,7 +34,7 @@ def test_healthz_answers_without_running_the_lifespan() -> None:
     }
 
 
-def test_readyz_reports_not_ready_when_the_pool_is_absent() -> None:
+def test_readyz_reports_not_ready_when_the_container_is_absent() -> None:
     client = TestClient(create_app())
 
     response = client.get("/readyz")
