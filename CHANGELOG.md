@@ -10,6 +10,31 @@ keys — may change between milestones. Breaking changes are called out explicit
 
 ### Added
 
+Vector store and persistence (M4):
+
+- The `atlas` schema: `ingest_sources`, `documents`, `chunks`, `ingest_jobs`,
+  `embedding_cache`, in a hand-written Alembic migration with a working
+  downgrade. `chunks.content_tsv` is a generated column, so the lexical and dense
+  sides always describe the same text.
+- HNSW (`vector_cosine_ops`, `m=16`, `ef_construction=64`), GIN over the tsvector,
+  and the supporting btree indexes from ADR-0004, including the partial index the
+  M7 job queue will poll.
+- `VectorStore` port and `PgVectorStore` adapter: content-hash existence check,
+  idempotent upsert that replaces a document's chunks atomically, record deletion
+  via the foreign-key cascade, and dense and lexical search with company,
+  visibility and model pre-filters.
+- Dense search sets `hnsw.iterative_scan = relaxed_order` so a filtered ANN query
+  cannot silently return too few rows, and converts cosine distance to a score so
+  every search mode sorts the same direction.
+- `CandidateChunk`: retrieval results are unauthorized by construction, so the
+  M6 authorization filter has a type to convert from.
+- Migrations ship inside the runtime image, so a deployment can apply its own
+  schema. `/readyz` compares the migrated vector width against the configured
+  embedding model and reports not-ready on a mismatch.
+- Integration tests against real PostgreSQL, run in CI against a pgvector service
+  container. They create and migrate their own database, so the migration is
+  verified against an empty cluster on every run.
+
 Vendor adapters (M3b):
 
 - Anthropic chat adapter. Sends `output_config.effort` and adaptive thinking,

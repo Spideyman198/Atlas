@@ -10,7 +10,7 @@ can be reviewed on its own; none depends on a later milestone to make sense.
 | M2 | Engine foundations | Done |
 | M3a | Provider ports, fakes and resilience | Done |
 | M3b | Vendor adapters (Anthropic, OpenAI, Voyage) | Done |
-| M4 | Vector store and persistence | Planned |
+| M4 | Vector store and persistence | Done |
 | M5 | Odoo addon skeleton | Planned |
 | M6 | Odoo gateway and authorization | Planned |
 | M7 | Ingestion pipeline | Planned |
@@ -114,15 +114,26 @@ accounts, and schedule the `live` suite nightly with repository secrets.
 
 ## M4 — Vector store and persistence
 
-- `atlas` database schema; Alembic migrations with working downgrades
-- `documents`, `chunks`, `ingest_jobs`, `embedding_cache`
+Status: done.
+
+- `atlas` schema as five tables — `ingest_sources`, `documents`, `chunks`,
+  `ingest_jobs`, `embedding_cache` — with a hand-written Alembic migration and a
+  working downgrade ([ADR-0008](docs/adr/0008-hand-written-migrations-and-explicit-sql.md))
 - HNSW, GIN and supporting indexes per
-  [docs/architecture/02-data-architecture.md](docs/architecture/02-data-architecture.md)
-- `VectorStore` port and `PgVectorStore` adapter; hybrid search SQL
-- Integration tests against a throwaway PostgreSQL container
+  [docs/architecture/02-data-architecture.md](docs/architecture/02-data-architecture.md),
+  plus a generated `content_tsv` so the dense and lexical sides cannot drift
+- `VectorStore` port and `PgVectorStore` adapter: idempotent upsert, atomic
+  delete-and-replace of chunks, dense and lexical search, company/visibility/model
+  pre-filters
+- `CandidateChunk` — retrieval results are unauthorized by construction, ready for
+  the M6 filter
+- Migrations ship in the runtime image; `/readyz` compares the migrated vector
+  width against the configured embedding model
+- Integration tests against real PostgreSQL, wired into CI as a service container
 
 Acceptance: write, dense search, lexical search and filtered search round-trip
-against real PostgreSQL, with recall verified on a seeded fixture.
+against real PostgreSQL; `alembic upgrade`/`downgrade`/`upgrade` is verified end to
+end and readiness follows the schema state.
 
 ## M5 — Odoo addon skeleton
 
