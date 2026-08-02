@@ -1,8 +1,14 @@
 # ADR-0004: pgvector in a dedicated database, HNSW + GIN hybrid indexes
 
-- **Status:** Accepted
+- **Status:** Accepted; the persistence toolkit is superseded by
+  [ADR-0008](0008-hand-written-migrations-and-explicit-sql.md)
 - **Date:** 2026-08-02
 - **Deciders:** Core team
+
+> The storage decisions here — pgvector, a separate `atlas` database, HNSW plus
+> GIN, the index set — all stand. Only the "SQLAlchemy 2.0 Core" part of the
+> toolkit was reversed: migrations are hand-written Alembic revisions and runtime
+> queries are explicit SQL over psycopg. See ADR-0008.
 
 ## Context
 

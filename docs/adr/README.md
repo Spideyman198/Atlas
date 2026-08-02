@@ -45,3 +45,4 @@ We use [Michael Nygard's template](https://cognitect.com/blog/2011/11/15/documen
 | [0005](0005-model-provider-strategy.md) | Provider-agnostic model layer with split chat/embedding vendors | Accepted |
 | [0006](0006-data-access-and-authorization.md) | Odoo is the authorization authority; tool-calling over text-to-SQL | Accepted |
 | [0007](0007-licensing.md) | LGPL-3.0-or-later for the whole repository | Accepted |
+| [0008](0008-hand-written-migrations-and-explicit-sql.md) | Hand-written Alembic migrations and explicit SQL, without SQLAlchemy Core | Accepted |
