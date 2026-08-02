@@ -125,6 +125,34 @@ jobs:
           ATLAS_TEST_DATABASE_URL: postgresql://atlas:atlas@127.0.0.1:5432/postgres
         run: pytest -m "unit or contract or integration" --cov --cov-report=term-missing
 
+  addon:
+    name: Odoo addon tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The addon runs under Odoo's own unittest runner, so it needs an Odoo and
+      # a database rather than a Python environment. This drives the compose
+      # stack rather than a hand-rolled container so that CI, `make test-odoo`
+      # and `make up` all build the same image from the same Dockerfile.
+      #
+      # `run` waits for the postgres service to report healthy, and the database
+      # named here does not exist on a fresh runner, so `--init` creates it: a
+      # pass means the addon installs from nothing and its tests are green.
+      # Odoo exits non-zero when a test fails.
+      - name: Install the addon on a clean database and run its tests
+        run: |
+          docker compose --env-file .env.example run --rm --entrypoint odoo \
+            --env PGPASSWORD=odoo_dev_password odoo \
+            --db_host postgres --db_port 5432 --db_user odoo \
+            --database odoo_atlas_ci --init odoo_atlas --without-demo \
+            --test-enable --test-tags /odoo_atlas \
+            --stop-after-init --max-cron-threads=0 --log-level=test
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose --env-file .env.example down --volumes
+
   images:
     name: Container images
     runs-on: ubuntu-latest

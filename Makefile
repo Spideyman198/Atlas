@@ -120,6 +120,24 @@ test-all: ## Run every test tier with the coverage gate (needs PostgreSQL up)
 	  -e ATLAS_TEST_DATABASE_URL=postgresql://$${POSTGRES_USER:-odoo}:$${POSTGRES_PASSWORD:-odoo_dev_password}@postgres:5432/postgres \
 	  atlas-tools pytest -m "unit or contract or integration" --cov --cov-report=term-missing
 
+# The addon runs under Odoo's own unittest runner, not pytest, and needs a
+# database with the module installed. Each run starts from a dropped database so
+# a passing result means "installs cleanly and passes", never "still passes on a
+# database someone has been poking at".
+ODOO_TEST_DB := odoo_atlas_test
+
+.PHONY: test-odoo
+test-odoo: ## Install the addon on a throwaway database and run its test suite
+	$(COMPOSE) up --detach postgres
+	$(COMPOSE) exec -T postgres psql -U $${POSTGRES_USER:-odoo} -d postgres \
+	  -c 'DROP DATABASE IF EXISTS $(ODOO_TEST_DB) WITH (FORCE)'
+	$(COMPOSE) run --rm --entrypoint odoo \
+	  -e PGPASSWORD=$${POSTGRES_PASSWORD:-odoo_dev_password} odoo \
+	  --db_host postgres --db_port 5432 --db_user $${POSTGRES_USER:-odoo} \
+	  --database $(ODOO_TEST_DB) --init odoo_atlas --without-demo \
+	  --test-enable --test-tags /odoo_atlas \
+	  --stop-after-init --max-cron-threads=0 --log-level=test
+
 .PHONY: migrate
 migrate: ## Apply Alembic migrations to the Atlas database
 	$(COMPOSE) exec atlas-api alembic upgrade head
@@ -133,7 +151,7 @@ migrate-status: ## Show the revision the Atlas database is on
 	$(COMPOSE) exec atlas-api alembic current
 
 .PHONY: check
-check: lint type imports test ## Run everything CI runs
+check: lint type imports test test-odoo ## Run everything CI runs
 
 # --- teardown --------------------------------------------------------------
 

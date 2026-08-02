@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="atlas_conversation_view_search" model="ir.ui.view">
+        <field name="name">atlas.conversation.search</field>
+        <field name="model">atlas.conversation</field>
+        <field name="arch" type="xml">
+            <search string="Conversations">
+                <field name="name"/>
+                <field name="user_id"/>
+                <filter name="filter_mine" string="My Conversations" domain="[('user_id', '=', uid)]"/>
+                <separator/>
+                <filter name="filter_draft" string="Draft" domain="[('state', '=', 'draft')]"/>
+                <filter name="filter_active" string="Active" domain="[('state', '=', 'active')]"/>
+                <filter name="filter_archived" string="Archived" domain="[('state', '=', 'archived')]"/>
+                <separator/>
+                <filter name="filter_last_week" string="Last 7 Days"
+                        domain="[('last_activity', '&gt;=', (context_today() - datetime.timedelta(days=7)).strftime('%Y-%m-%d'))]"/>
+                <group name="group_by">
+                    <filter name="group_by_user" string="Owner" context="{'group_by': 'user_id'}"/>
+                    <filter name="group_by_state" string="Status" context="{'group_by': 'state'}"/>
+                    <filter name="group_by_activity" string="Last Activity"
+                            context="{'group_by': 'last_activity'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="atlas_conversation_view_list" model="ir.ui.view">
+        <field name="name">atlas.conversation.list</field>
+        <field name="model">atlas.conversation</field>
+        <field name="arch" type="xml">
+            <list string="Conversations">
+                <field name="name"/>
+                <field name="user_id" widget="many2one_avatar_user"/>
+                <field name="message_count" string="Messages"/>
+                <field name="total_cost" sum="Total" optional="show"/>
+                <field name="last_activity"/>
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'draft'"
+                       decoration-success="state == 'active'"
+                       decoration-muted="state == 'archived'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="atlas_conversation_view_form" model="ir.ui.view">
+        <field name="name">atlas.conversation.form</field>
+        <field name="model">atlas.conversation</field>
+        <field name="arch" type="xml">
+            <form string="Conversation">
+                <header>
+                    <button name="action_set_archived" string="Archive" type="object"
+                            invisible="state == 'archived'"/>
+                    <button name="action_set_active" string="Reopen" type="object"
+                            invisible="state != 'archived'"/>
+                    <field name="state" widget="statusbar" statusbar_visible="draft,active"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="e.g. Overdue invoices this quarter"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="user_id" widget="many2one_avatar_user"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                        <group>
+                            <field name="last_activity"/>
+                            <field name="message_count"/>
+                            <field name="total_cost"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Messages" name="messages">
+                            <field name="message_ids" nolabel="1" readonly="1">
+                                <list>
+                                    <field name="role"/>
+                                    <field name="content"/>
+                                    <field name="model_used" optional="hide"/>
+                                    <field name="prompt_tokens" optional="hide"/>
+                                    <field name="completion_tokens" optional="hide"/>
+                                    <field name="cost" sum="Total" optional="show"/>
+                                    <field name="latency_ms" optional="hide"/>
+                                    <field name="status" widget="badge"
+                                           decoration-danger="status == 'error'"
+                                           decoration-success="status == 'done'"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="atlas_conversation_action" model="ir.actions.act_window">
+        <field name="name">Conversations</field>
+        <field name="res_model">atlas.conversation</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="atlas_conversation_view_search"/>
+        <field name="context">{'search_default_filter_mine': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No conversations yet
+            </p>
+            <p>
+                Conversations are created when you ask Atlas a question. Each one is
+                answered under your own access rights, so you never see a record you
+                could not have opened yourself.
+            </p>
+        </field>
+    </record>
+
+</odoo>

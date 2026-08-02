@@ -159,10 +159,28 @@ Find the offending process on Windows with:
 powershell -Command "Get-NetTCPConnection -LocalPort 5432 -State Listen | Select-Object OwningProcess"
 ```
 
-**`option addons_path, invalid addons directory '/mnt/extra-addons', skipped`**
-Expected until M5. Odoo skips an addons directory that contains no modules, and
-`addons/` holds only a placeholder until the `odoo_atlas` addon lands. The
-warning disappears on its own.
+**The Atlas menu is missing after an upgrade**
+`ODOO_INIT_MODULES` is only read when the database is first created, so adding
+`odoo_atlas` to it does nothing to an existing database. Install it from
+**Apps** — clear the *Apps* filter and search for Atlas — or from the command
+line:
+
+```bash
+docker compose run --rm --entrypoint odoo -e PGPASSWORD="$POSTGRES_PASSWORD" odoo \
+  --db_host postgres --db_port 5432 --db_user "$POSTGRES_USER" \
+  --database odoo --init odoo_atlas --stop-after-init
+docker compose restart odoo
+```
+
+The restart is not optional. Installing from a separate container leaves the
+running server holding a registry that predates the new models, and it answers
+`404` for them while happily returning the module's data rows — a confusing
+combination. Installing from **Apps** instead reloads the registry in place.
+
+**`You do not have enough rights to access`, on a fresh install**
+Atlas access is granted per user rather than to every employee: a question costs
+money to answer. Give the user the **Atlas** privilege under
+**Settings → Users & Companies → Users**. The administrator has it already.
 
 **`bad interpreter: /bin/sh^M` in a container log**
 A shell script was checked out with Windows line endings. `.gitattributes`

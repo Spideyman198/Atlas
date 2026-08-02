@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="res_groups_privilege_atlas" model="res.groups.privilege">
+        <field name="name">Atlas</field>
+        <field name="sequence">30</field>
+        <field name="category_id" ref="base.module_category_productivity"/>
+    </record>
+
+    <record id="group_atlas_user" model="res.groups">
+        <field name="name">User: Own Conversations</field>
+        <field name="sequence">10</field>
+        <field name="privilege_id" ref="res_groups_privilege_atlas"/>
+        <field name="comment">Ask questions and see the conversations they started.</field>
+    </record>
+
+    <record id="group_atlas_manager" model="res.groups">
+        <field name="name">Administrator</field>
+        <field name="sequence">20</field>
+        <field name="privilege_id" ref="res_groups_privilege_atlas"/>
+        <field name="implied_ids" eval="[(4, ref('group_atlas_user'))]"/>
+        <field name="comment">See every conversation in the allowed companies, and configure Atlas.</field>
+        <field name="user_ids" eval="[(4, ref('base.user_admin'))]"/>
+    </record>
+
+    <data noupdate="1">
+
+        <!--
+            Ownership. A conversation carries the access rights of the user who
+            started it (ADR-0006), so letting a second user read it would be a
+            way to read answers computed under someone else's permissions. The
+            same rule is repeated on messages and citations against their own
+            denormalised user_id rather than traversing the relation, so each is
+            a single indexed comparison.
+        -->
+        <record id="atlas_conversation_rule_own" model="ir.rule">
+            <field name="name">atlas.conversation: own conversations only</field>
+            <field name="model_id" ref="model_atlas_conversation"/>
+            <field name="groups" eval="[(4, ref('group_atlas_user'))]"/>
+            <field name="domain_force">[('user_id', '=', user.id)]</field>
+        </record>
+
+        <record id="atlas_message_rule_own" model="ir.rule">
+            <field name="name">atlas.message: own conversations only</field>
+            <field name="model_id" ref="model_atlas_message"/>
+            <field name="groups" eval="[(4, ref('group_atlas_user'))]"/>
+            <field name="domain_force">[('user_id', '=', user.id)]</field>
+        </record>
+
+        <record id="atlas_message_citation_rule_own" model="ir.rule">
+            <field name="name">atlas.message.citation: own conversations only</field>
+            <field name="model_id" ref="model_atlas_message_citation"/>
+            <field name="groups" eval="[(4, ref('group_atlas_user'))]"/>
+            <field name="domain_force">[('user_id', '=', user.id)]</field>
+        </record>
+
+        <!--
+            Administrators see everything the multi-company rules below still
+            allow. Rules attached to different groups are ORed, so a manager —
+            who is also an Atlas user — is not narrowed by the ownership rules.
+        -->
+        <record id="atlas_conversation_rule_manager" model="ir.rule">
+            <field name="name">atlas.conversation: administrators see all</field>
+            <field name="model_id" ref="model_atlas_conversation"/>
+            <field name="groups" eval="[(4, ref('group_atlas_manager'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+        </record>
+
+        <record id="atlas_message_rule_manager" model="ir.rule">
+            <field name="name">atlas.message: administrators see all</field>
+            <field name="model_id" ref="model_atlas_message"/>
+            <field name="groups" eval="[(4, ref('group_atlas_manager'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+        </record>
+
+        <record id="atlas_message_citation_rule_manager" model="ir.rule">
+            <field name="name">atlas.message.citation: administrators see all</field>
+            <field name="model_id" ref="model_atlas_message_citation"/>
+            <field name="groups" eval="[(4, ref('group_atlas_manager'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+        </record>
+
+        <!--
+            Multi-company. These carry no group, which makes them global: Odoo
+            ANDs them with whatever the group rules above allow, so they bind
+            administrators too.
+        -->
+        <record id="atlas_conversation_rule_company" model="ir.rule">
+            <field name="name">atlas.conversation: multi-company</field>
+            <field name="model_id" ref="model_atlas_conversation"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+
+        <record id="atlas_message_rule_company" model="ir.rule">
+            <field name="name">atlas.message: multi-company</field>
+            <field name="model_id" ref="model_atlas_message"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+
+        <record id="atlas_message_citation_rule_company" model="ir.rule">
+            <field name="name">atlas.message.citation: multi-company</field>
+            <field name="model_id" ref="model_atlas_message_citation"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+
+    </data>
+
+</odoo>

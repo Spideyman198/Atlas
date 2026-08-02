@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_atlas_conversation_user,atlas.conversation user,model_atlas_conversation,group_atlas_user,1,1,1,1
+access_atlas_conversation_manager,atlas.conversation manager,model_atlas_conversation,group_atlas_manager,1,1,1,1
+access_atlas_message_user,atlas.message user,model_atlas_message,group_atlas_user,1,1,1,1
+access_atlas_message_manager,atlas.message manager,model_atlas_message,group_atlas_manager,1,1,1,1
+access_atlas_message_citation_user,atlas.message.citation user,model_atlas_message_citation,group_atlas_user,1,1,1,1
+access_atlas_message_citation_manager,atlas.message.citation manager,model_atlas_message_citation,group_atlas_manager,1,1,1,1

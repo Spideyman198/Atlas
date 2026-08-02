@@ -63,15 +63,15 @@ exists today. See [ROADMAP.md](../../ROADMAP.md).
 odoo-atlas/
 ├── .github/workflows/            #   lint, type, test, security, release
 ├── addons/
-│   └── odoo_atlas/               # (M5) the Odoo addon — a thin adapter
+│   └── odoo_atlas/               #   the Odoo addon — a thin adapter
 │       ├── __manifest__.py
 │       ├── models/               #   atlas.conversation, atlas.message, settings
 │       ├── controllers/          # (M6) REST endpoints the engine calls back into
-│       ├── services/             #   HTTP client for atlas-api
+│       ├── services/             # (M6) HTTP client for atlas-api
 │       ├── wizards/              # (M7) ingest-source configuration wizard
 │       ├── views/                #   XML: forms, lists, menus, actions, settings
 │       ├── security/             #   groups, ir.model.access.csv, record rules
-│       ├── data/                 #   ir.cron, suggested prompts
+│       ├── data/                 # (M7) ir.cron, suggested prompts
 │       ├── static/src/           # (M11) OWL components, SCSS, XML templates
 │       └── tests/                #   Odoo TransactionCase / HttpCase
 ├── services/

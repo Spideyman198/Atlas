@@ -10,6 +10,32 @@ keys — may change between milestones. Breaking changes are called out explicit
 
 ### Added
 
+Odoo addon skeleton (M5):
+
+- `odoo_atlas`, the Odoo half of Atlas: `atlas.conversation`, `atlas.message` and
+  `atlas.message.citation`, with list, form and search views, menus and window
+  actions. It depends on `base` and `web` only and contains no AI code.
+- A conversation is titled from its first question, leaves `draft` when it gets
+  one, and carries a stored message count and provider cost.
+- Citations are rows, not a JSON blob: they resolve to the live record through a
+  computed reference, and keep the name the record had when it was cited so they
+  still read sensibly once it is deleted.
+- Two groups — Atlas user and Atlas administrator — with `ir.model.access.csv`
+  and three record rules per model: ownership, administrator, and a group-less
+  multi-company rule, which is global and so binds administrators too. Neither
+  group is implied by `base.group_user`; access is granted per user.
+- Messages and citations store their own `user_id` and `company_id`, copied from
+  the conversation, so every record rule is a comparison against an indexed
+  column rather than a join back to `atlas_conversation`.
+- A conversation cannot change owner, administrator included. Its answers were
+  computed under one user's access rights, so reassigning it would show a second
+  user results drawn from records they may not read.
+- Settings page for the engine URL, the service token and the request timeout.
+- 40 `TransactionCase` tests including the negative access paths, run by Odoo's
+  own runner: `make test-odoo` installs the addon into a database created from
+  nothing, so a pass means it installs cleanly as well as behaves. CI gains an
+  `addon` job that does the same.
+
 Vector store and persistence (M4):
 
 - The `atlas` schema: `ingest_sources`, `documents`, `chunks`, `ingest_jobs`,

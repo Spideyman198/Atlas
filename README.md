@@ -7,9 +7,10 @@ already has in the ERP.
 [![CI](https://github.com/Spideyman198/Atlas/actions/workflows/ci.yml/badge.svg)](https://github.com/Spideyman198/Atlas/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-LGPL--3.0-blue.svg)](LICENSE)
 
-Status: early development. The architecture is documented and the development
-environment runs. The assistant itself is not implemented yet — see
-[ROADMAP.md](ROADMAP.md) for what has landed and what is next.
+Status: early development. The architecture is documented, the development
+environment runs, and the engine and addon foundations are in place. Nothing asks
+a question end to end yet — see [ROADMAP.md](ROADMAP.md) for what has landed and
+what is next.
 
 ## The problem
 
@@ -103,9 +104,10 @@ make up
 
 On Windows, use `.\make.ps1 <target>` instead of `make <target>`.
 
-First boot initialises the Odoo database and takes a few minutes. When it finishes:
+First boot initialises the Odoo database and installs the addon, which takes a few
+minutes. When it finishes:
 
-- Odoo: <http://localhost:8069> (`admin` / `admin`)
+- Odoo: <http://localhost:8069> (`admin` / `admin`), with **Atlas** in the menu
 - Engine API docs: <http://127.0.0.1:8000/docs>
 
 Check the engine can reach its database:
@@ -123,11 +125,16 @@ Full instructions and troubleshooting are in [docs/installation.md](docs/install
 ## Development
 
 ```bash
-make check    # ruff, mypy --strict, pytest
-make test     # tests with coverage
-make logs     # follow all services
-make help     # all targets
+make check      # ruff, mypy --strict, import contracts, both test suites
+make test       # engine tests with coverage
+make test-odoo  # addon tests, on a database built from nothing
+make logs       # follow all services
+make help       # all targets
 ```
+
+The addon is not tested by pytest. Odoo models only exist inside a loaded
+registry, so its tests run under Odoo's own runner against a freshly installed
+database.
 
 Three architectural rules are enforced by `import-linter` in CI rather than by
 review: `domain` imports nothing else from `atlas`, nothing in `atlas` imports

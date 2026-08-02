@@ -1,8 +1,8 @@
 # Developer Guide
 
-How the engine is put together and how to work on it. For setup, see
-[installation.md](installation.md). For why the system is shaped this way, see
-[the decision records](adr/README.md).
+How the engine and the addon are put together, and how to work on them. For
+setup, see [installation.md](installation.md). For why the system is shaped this
+way, see [the decision records](adr/README.md).
 
 ## Layers
 
@@ -35,8 +35,59 @@ These are checked, not assumed. To convince yourself, add
 `from atlas.config.settings import Settings` to any module under `atlas/domain/`
 and run `make imports` — the first contract reports `BROKEN`.
 
-`make check` runs ruff, mypy `--strict`, the contracts, and the tests. It is what
-CI runs.
+`make check` runs ruff, mypy `--strict`, the contracts, and the tests — both the
+engine's and the addon's. It is what CI runs.
+
+## The addon
+
+```
+addons/odoo_atlas/
+├── __manifest__.py   depends on base and web only
+├── models/           atlas.conversation, atlas.message, atlas.message.citation,
+│                     and the res.config.settings extension
+├── security/         the two groups, ir.model.access.csv, the record rules
+├── views/            list, form and search views, menus, window actions
+├── tests/            TransactionCase suites, run by Odoo, not pytest
+└── text.py           helpers with no Odoo import
+```
+
+The addon is a thin adapter and holds no AI code
+([ADR-0002](adr/0002-sidecar-service-topology.md)). It is subject to Odoo's
+conventions rather than the engine's, so the root `pyproject.toml` relaxes
+several lint rules under `addons/**`; `mypy` does not cover it at all, because
+the ORM's metaclass machinery makes strict typing there more noise than signal.
+
+Two groups: **Atlas / User: Own Conversations** and **Atlas / Administrator**,
+the second implying the first. Neither is implied by `base.group_user` — a
+question costs money to answer, so access is granted per user rather than to
+every employee.
+
+Three record rules per model, and the split matters:
+
+| Rule | Groups | Domain |
+| --- | --- | --- |
+| Ownership | Atlas user | `[('user_id', '=', user.id)]` |
+| Administrator | Atlas administrator | `[(1, '=', 1)]` |
+| Multi-company | *none — global* | `[('company_id', 'in', company_ids)]` |
+
+Rules attached to different groups are ORed, so an administrator is not narrowed
+by the ownership rule. A rule with no group is global and is ANDed with the rest,
+so the company boundary binds administrators too.
+
+`atlas.message` and `atlas.message.citation` carry their own stored `user_id` and
+`company_id`, copied from the conversation. That is a denormalisation for the
+benefit of the record rules: every one of them is then a comparison against an
+indexed column rather than a join back to `atlas_conversation`. The engine makes
+the same trade for the same reason — `chunks` carries a copy of its document's
+company and visibility so the retrieval pre-filter stays a single index scan
+([data architecture](architecture/02-data-architecture.md)).
+
+A conversation cannot change owner, not even for an administrator. Its answers
+were computed under one user's access rights
+([ADR-0006](adr/0006-data-access-and-authorization.md)), so handing it to a
+second user would show them results assembled from records they may not read.
+The record rules stop a user reaching into someone else's conversation;
+`atlas.conversation.write` stops the reverse.
 
 ## Configuration
 
@@ -125,6 +176,25 @@ happy path proves nothing about access control.
 
 Coverage has a floor that rises each milestone. Lowering it is a reviewable
 decision.
+
+### The addon's tests
+
+The addon is not tested by pytest. Odoo models only exist inside a loaded
+registry, so its tests are `TransactionCase` classes run by Odoo's own runner
+against a database with the module installed:
+
+```bash
+make test-odoo
+```
+
+That target drops `odoo_atlas_test`, installs the addon into a database created
+from nothing, and runs the suite. Starting from an empty database is the point:
+a pass means the addon installs cleanly *and* its tests are green, never that it
+still works on a database somebody has been editing by hand. Odoo exits non-zero
+when a test fails, so it gates CI like any other job.
+
+Coverage is not measured here. Odoo's runner has no coverage integration worth
+the wiring, and the number would not be comparable to the engine's.
 
 ## Adding a port and an adapter
 

@@ -93,7 +93,17 @@ ignore = [
 ]
 # Odoo addons follow Odoo's conventions, not ours: field definitions are mutable
 # class attributes by design, and the framework supplies most docstring context.
-"addons/**" = ["D", "ANN", "RUF012", "A003", "PLR0913"]
+# TID252 is off because an addon's `__init__.py` must use relative imports —
+# Odoo loads a module as `odoo.addons.<name>`, so the package is not importable
+# under its own directory name.
+"addons/**" = ["D", "ANN", "RUF012", "A003", "PLR0913", "TID252"]
+# An addon's package files exist to make Odoo import the modules below them.
+# Nothing re-exports anything, and the order is Odoo's loading order, not isort's.
+"addons/**/__init__.py" = ["F401", "I001"]
+# Odoo test cases assert, and they name expected values inline. `PT` is off
+# because these run under Odoo's own unittest-based runner, not pytest, so
+# `assertRaises` and friends are the correct spelling here.
+"addons/**/tests/**" = ["S101", "PLR2004", "PT"]
 # An Odoo manifest is a bare dict literal at module level.
 "addons/**/__manifest__.py" = ["B018"]
 

@@ -1,8 +1,8 @@
 # Data Architecture
 
-> Design intent for M4 (Atlas schema) and M5 (Odoo models). DDL shown here is the
-> target; the authoritative definitions are the Alembic migrations and the Odoo
-> model classes once those milestones land.
+> Both halves are built as of M5. The authoritative definitions are the Alembic
+> migrations under `services/atlas/migrations/` and the model classes under
+> `addons/odoo_atlas/models/`; the diagrams below are the map, not the territory.
 
 ## 1. Two databases, one cluster
 
@@ -181,8 +181,8 @@ erDiagram
         int      message_id FK
         char     res_model
         int      res_id
-        char     display_name
-        char     snippet
+        char     record_name    "name at answer time"
+        text     snippet
         float    score
         int      sequence
     }
@@ -205,9 +205,27 @@ that opens the actual Odoo record. Making them rows gives us `search`, `read_gro
 ("which records are cited most?"), and a clean many2one-style resolution without
 parsing JSON in the view layer. It also lets M12 measure citation coverage with SQL.
 
+The reference is resolved at read time rather than stored as a `many2one`, because
+there is no foreign key to hang one on: the cited record may be deleted after the
+answer was given. `record_name` keeps the name the record had when it was cited, so a
+citation still reads sensibly once its target is gone.
+
 **Why `atlas_access_log` is separate from `atlas_message`.** One message may trigger
 several authorization checks across several models, and the log must survive message
 deletion for audit purposes.
+
+**`user_id` and `company_id` are repeated on messages and citations.** They are copied
+from the conversation and stored, so that every record rule in the addon is a
+comparison against an indexed column rather than a join back to `atlas_conversation`.
+This is the same trade made on `chunks` above, for the same reason, with the same
+write-time consistency obligation — here discharged by the ORM, since both are related
+fields the framework recomputes.
+
+**A conversation cannot change owner.** Its answers were computed under one user's
+access rights ([ADR-0006](../adr/0006-data-access-and-authorization.md)); reassigning
+it would show a second user results assembled from records they may not read. The
+record rules prevent reading someone else's conversation, and
+`atlas.conversation.write` prevents pushing one of your own onto them.
 
 ## 3. Indexing strategy
 

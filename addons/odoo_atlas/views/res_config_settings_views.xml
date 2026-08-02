@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="res_config_settings_view_form" model="ir.ui.view">
+        <field name="name">res.config.settings.view.form.inherit.odoo_atlas</field>
+        <field name="model">res.config.settings</field>
+        <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//form" position="inside">
+                <app data-string="Atlas" string="Atlas" name="odoo_atlas"
+                     groups="odoo_atlas.group_atlas_manager">
+                    <block title="Engine" name="atlas_engine">
+                        <setting id="atlas_engine_url_setting" string="Engine URL"
+                                 help="Where Odoo reaches the Atlas engine.">
+                            <field name="atlas_engine_url" placeholder="http://atlas-api:8000"/>
+                        </setting>
+                        <setting id="atlas_service_token_setting" string="Service Token"
+                                 help="Shared secret authenticating Odoo to the engine and back.">
+                            <field name="atlas_service_token" password="True"
+                                   placeholder="Generate a long random string"/>
+                        </setting>
+                        <setting id="atlas_request_timeout_setting" string="Request Timeout"
+                                 help="How long Odoo waits for an answer before giving up.">
+                            <field name="atlas_request_timeout"/>
+                            <span class="ms-1">seconds</span>
+                        </setting>
+                    </block>
+                </app>
+            </xpath>
+        </field>
+    </record>
+
+    <!-- Opens the settings page on the Atlas section rather than at the top. -->
+    <record id="atlas_config_settings_action" model="ir.actions.act_window">
+        <field name="name">Settings</field>
+        <field name="res_model">res.config.settings</field>
+        <field name="view_mode">form</field>
+        <field name="context">{'module': 'odoo_atlas', 'bin_size': False}</field>
+    </record>
+
+</odoo>

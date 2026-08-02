@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="atlas_message_view_search" model="ir.ui.view">
+        <field name="name">atlas.message.search</field>
+        <field name="model">atlas.message</field>
+        <field name="arch" type="xml">
+            <search string="Messages">
+                <field name="content"/>
+                <field name="conversation_id"/>
+                <field name="trace_id"/>
+                <filter name="filter_errors" string="Errors" domain="[('status', '=', 'error')]"/>
+                <separator/>
+                <filter name="filter_questions" string="Questions" domain="[('role', '=', 'user')]"/>
+                <filter name="filter_answers" string="Answers" domain="[('role', '=', 'assistant')]"/>
+                <group name="group_by">
+                    <filter name="group_by_conversation" string="Conversation"
+                            context="{'group_by': 'conversation_id'}"/>
+                    <filter name="group_by_role" string="Role" context="{'group_by': 'role'}"/>
+                    <filter name="group_by_model" string="Model" context="{'group_by': 'model_used'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="atlas_message_view_list" model="ir.ui.view">
+        <field name="name">atlas.message.list</field>
+        <field name="model">atlas.message</field>
+        <field name="arch" type="xml">
+            <list string="Messages">
+                <field name="conversation_id"/>
+                <field name="role"/>
+                <field name="content"/>
+                <field name="model_used" optional="hide"/>
+                <field name="prompt_tokens" optional="hide"/>
+                <field name="completion_tokens" optional="hide"/>
+                <field name="cost" sum="Total"/>
+                <field name="latency_ms" optional="hide"/>
+                <field name="status" widget="badge"
+                       decoration-danger="status == 'error'"
+                       decoration-success="status == 'done'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="atlas_message_view_form" model="ir.ui.view">
+        <field name="name">atlas.message.form</field>
+        <field name="model">atlas.message</field>
+        <field name="arch" type="xml">
+            <form string="Message">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="conversation_id"/>
+                            <field name="role"/>
+                            <field name="status"/>
+                        </group>
+                        <group>
+                            <field name="model_used"/>
+                            <field name="prompt_tokens"/>
+                            <field name="completion_tokens"/>
+                            <field name="cost"/>
+                            <field name="latency_ms"/>
+                            <field name="trace_id"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Content" name="content">
+                            <field name="content" nolabel="1"/>
+                        </page>
+                        <page string="Citations" name="citations">
+                            <field name="citation_ids" nolabel="1">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="res_model"/>
+                                    <field name="res_id"/>
+                                    <field name="record_name"/>
+                                    <field name="record_ref" readonly="1"/>
+                                    <field name="score"/>
+                                    <field name="snippet" optional="show"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Tool Calls" name="tool_calls">
+                            <field name="tool_calls" nolabel="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="atlas_message_action" model="ir.actions.act_window">
+        <field name="name">Messages</field>
+        <field name="res_model">atlas.message</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="atlas_message_view_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No messages yet
+            </p>
+            <p>
+                Every question and answer is recorded here with the tokens it cost and
+                the trace id that ties it to the engine's logs.
+            </p>
+        </field>
+    </record>
+
+</odoo>

@@ -11,7 +11,7 @@ can be reviewed on its own; none depends on a later milestone to make sense.
 | M3a | Provider ports, fakes and resilience | Done |
 | M3b | Vendor adapters (Anthropic, OpenAI, Voyage) | Done |
 | M4 | Vector store and persistence | Done |
-| M5 | Odoo addon skeleton | Planned |
+| M5 | Odoo addon skeleton | Done |
 | M6 | Odoo gateway and authorization | Planned |
 | M7 | Ingestion pipeline | Planned |
 | M8 | Retrieval engine | Planned |
@@ -137,13 +137,26 @@ end and readiness follows the schema state.
 
 ## M5 — Odoo addon skeleton
 
-- Manifest, module structure, `LGPL-3` declaration
-- Models: `atlas.conversation`, `atlas.message`, `atlas.message.citation`
-- Security: two groups, `ir.model.access.csv`, record rules for own-conversations
-  and multi-company scoping
-- List, form and search views; menus; window actions
-- `res.config.settings` extension for the settings page
-- `TransactionCase` tests including negative access paths
+Status: done.
+
+- `odoo_atlas`: manifest, module structure, `LGPL-3`, depending on `base` and
+  `web` only — the business modules Atlas indexes are read by name at M7, which
+  needs no dependency on them
+- Models: `atlas.conversation`, `atlas.message`, `atlas.message.citation`. A
+  conversation is titled from its first question, leaves `draft` on it, and keeps
+  a stored message count and provider cost
+- Citations resolve to the live record through a computed `Reference`, and keep
+  the name the record had when it was cited so they survive its deletion
+- Security: two groups, `ir.model.access.csv`, and three record rules per model —
+  ownership, administrator, and a group-less multi-company rule that binds
+  administrators too. `user_id` and `company_id` are stored on messages and
+  citations so each rule is an indexed comparison, not a join
+- A conversation cannot change owner, administrator included: its answers were
+  computed under one user's access rights
+- List, form and search views, menus, window actions, and a `res.config.settings`
+  page for the engine URL, service token and timeout
+- 40 `TransactionCase` tests, including the negative access paths, run by Odoo's
+  own runner via `make test-odoo` and gating CI in a new `addon` job
 
 Acceptance: the addon installs on a clean Odoo 19 database, a non-manager cannot
 read another user's conversation, and Odoo's test runner passes.

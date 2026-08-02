@@ -92,6 +92,7 @@ docs(adr): record decision to run the engine as a sidecar service
 
 - [ ] `make lint` and `make type` are clean (`ruff`, `mypy --strict`, `import-linter`)
 - [ ] `make test` passes; new code is covered
+- [ ] `make test-odoo` passes if `addons/` changed
 - [ ] An ADR is included if the change is architecturally significant
 - [ ] Public functions and all modules have docstrings explaining *why*, not *what*
 - [ ] No secrets, no API keys, no customer data — including in test fixtures

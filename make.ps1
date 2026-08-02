@@ -67,6 +67,7 @@ function Show-Help {
         @('test',        'Run the offline test suite (unit + contract)'),
         @('test-integration', 'Run integration tests against the running PostgreSQL'),
         @('test-all',    'Run every test tier with the coverage gate'),
+        @('test-odoo',   'Install the addon on a throwaway database and run its tests'),
         @('migrate',     'Apply Alembic migrations to the Atlas database'),
         @('check',       'Run everything CI runs'),
         @('clean',       'Stop the stack and DELETE all data')
@@ -144,11 +145,31 @@ switch ($Target) {
         Invoke-Checked ($Compose + @('--profile', 'tools', 'run', '--rm', '-e', "ATLAS_TEST_DATABASE_URL=$dsn", 'atlas-tools', 'pytest', '-m', 'unit or contract or integration', '--cov', '--cov-report=term-missing'))
     }
 
+    # The addon runs under Odoo's own unittest runner, not pytest, and needs a
+    # database with the module installed. Each run starts from a dropped database
+    # so a passing result means "installs cleanly and passes", never "still passes
+    # on a database someone has been poking at".
+    'test-odoo' {
+        $user = Get-EnvValue 'POSTGRES_USER' 'odoo'
+        $password = Get-EnvValue 'POSTGRES_PASSWORD' 'odoo_dev_password'
+        $database = 'odoo_atlas_test'
+        Invoke-Checked ($Compose + @('up', '--detach', 'postgres'))
+        Invoke-Checked ($Compose + @('exec', '-T', 'postgres', 'psql', '-U', $user, '-d', 'postgres',
+            '-c', "DROP DATABASE IF EXISTS $database WITH (FORCE)"))
+        Invoke-Checked ($Compose + @('run', '--rm', '--entrypoint', 'odoo',
+            '-e', "PGPASSWORD=$password", 'odoo',
+            '--db_host', 'postgres', '--db_port', '5432', '--db_user', $user,
+            '--database', $database, '--init', 'odoo_atlas', '--without-demo',
+            '--test-enable', '--test-tags', '/odoo_atlas',
+            '--stop-after-init', '--max-cron-threads=0', '--log-level=test'))
+    }
+
     'check' {
         & $PSCommandPath 'lint'
         & $PSCommandPath 'type'
         & $PSCommandPath 'imports'
         & $PSCommandPath 'test'
+        & $PSCommandPath 'test-odoo'
     }
 
     'clean' {

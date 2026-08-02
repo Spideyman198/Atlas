@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <menuitem id="menu_atlas_root"
+              name="Atlas"
+              sequence="95"
+              groups="odoo_atlas.group_atlas_user"/>
+
+    <menuitem id="menu_atlas_conversations"
+              name="Conversations"
+              parent="menu_atlas_root"
+              action="atlas_conversation_action"
+              sequence="10"/>
+
+    <menuitem id="menu_atlas_technical"
+              name="Technical"
+              parent="menu_atlas_root"
+              sequence="90"
+              groups="odoo_atlas.group_atlas_manager"/>
+
+    <menuitem id="menu_atlas_messages"
+              name="Messages"
+              parent="menu_atlas_technical"
+              action="atlas_message_action"
+              sequence="10"/>
+
+    <menuitem id="menu_atlas_configuration"
+              name="Configuration"
+              parent="menu_atlas_root"
+              sequence="99"
+              groups="odoo_atlas.group_atlas_manager"/>
+
+    <menuitem id="menu_atlas_settings"
+              name="Settings"
+              parent="menu_atlas_configuration"
+              action="atlas_config_settings_action"
+              sequence="10"/>
+
+</odoo>
