@@ -66,9 +66,12 @@ jobs:
       # Both tiers are offline — no network, no database, no API key — so both run
       # on every push. Excluding `contract` would mean the suite that enforces
       # adapter substitutability never gates a pull request.
+      # Coverage is reported, not gated: this selection cannot reach the
+      # persistence layer, which needs a database. The integration job below runs
+      # every tier and owns the gate.
       - name: pytest
         run: |
-          pytest -m "unit or contract" \
+          pytest -m "unit or contract" --cov-fail-under=0 \
             --cov --cov-report=term-missing --cov-report=xml --junitxml=junit.xml
 
       - name: Upload coverage report
@@ -80,6 +83,47 @@ jobs:
             coverage.xml
             junit.xml
           retention-days: 14
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # The same image the stack runs, so the tests exercise the pgvector
+        # version the deployment actually has.
+        image: pgvector/pgvector:0.8.6-pg17-bookworm
+        env:
+          POSTGRES_USER: atlas
+          POSTGRES_PASSWORD: atlas
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U atlas"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: services/atlas/pyproject.toml
+
+      - name: Install the engine and its toolchain
+        run: pip install -e "services/atlas[dev]"
+
+      # Creates its own database and runs Alembic against it, so this also
+      # verifies the migration applies to an empty cluster.
+      #
+      # Runs every tier: with a database present this is the only selection that
+      # can execute every line, so it is where the coverage gate belongs.
+      - name: pytest (all tiers)
+        env:
+          ATLAS_TEST_DATABASE_URL: postgresql://atlas:atlas@127.0.0.1:5432/postgres
+        run: pytest -m "unit or contract or integration" --cov --cov-report=term-missing
 
   images:
     name: Container images

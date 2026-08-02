@@ -102,9 +102,35 @@ type: ## Run mypy in strict mode
 imports: ## Verify the architectural layering contracts
 	$(TOOLS) lint-imports
 
+# Offline only, so it needs no services. Coverage is reported but not gated: this
+# selection cannot reach the persistence layer. `test-all` owns the gate.
 .PHONY: test
-test: ## Run the offline test suite (unit + contract) with coverage
-	$(TOOLS) pytest -m "unit or contract" --cov --cov-report=term-missing
+test: ## Run the offline test suite (unit + contract)
+	$(TOOLS) pytest -m "unit or contract" --cov --cov-report=term-missing --cov-fail-under=0
+
+.PHONY: test-integration
+test-integration: ## Run integration tests against the running PostgreSQL
+	$(COMPOSE) --profile tools run --rm \
+	  -e ATLAS_TEST_DATABASE_URL=postgresql://$${POSTGRES_USER:-odoo}:$${POSTGRES_PASSWORD:-odoo_dev_password}@postgres:5432/postgres \
+	  atlas-tools pytest -m integration --no-cov
+
+.PHONY: test-all
+test-all: ## Run every test tier with the coverage gate (needs PostgreSQL up)
+	$(COMPOSE) --profile tools run --rm \
+	  -e ATLAS_TEST_DATABASE_URL=postgresql://$${POSTGRES_USER:-odoo}:$${POSTGRES_PASSWORD:-odoo_dev_password}@postgres:5432/postgres \
+	  atlas-tools pytest -m "unit or contract or integration" --cov --cov-report=term-missing
+
+.PHONY: migrate
+migrate: ## Apply Alembic migrations to the Atlas database
+	$(COMPOSE) exec atlas-api alembic upgrade head
+
+.PHONY: migrate-down
+migrate-down: ## Roll back the most recent migration
+	$(COMPOSE) exec atlas-api alembic downgrade -1
+
+.PHONY: migrate-status
+migrate-status: ## Show the revision the Atlas database is on
+	$(COMPOSE) exec atlas-api alembic current
 
 .PHONY: check
 check: lint type imports test ## Run everything CI runs

@@ -80,6 +80,10 @@ ignore = [
 # it on every implementation produces docstrings that restate the method name and
 # drift from the port they claim to describe. Docstrings are still used here
 # wherever an adapter has something of its own to explain.
+# Alembic revisions: `upgrade`/`downgrade` are a fixed contract with the tool, and
+# the module docstring already says what the revision does. INP001 does not apply —
+# the versions directory is loaded by Alembic, not imported as a package.
+"services/atlas/migrations/**" = ["D103", "INP001"]
 "services/atlas/src/atlas/infrastructure/**" = [
     "D102",
     # Vendor SDK responses are untyped payloads. Converting `Any` into typed
@@ -213,7 +217,13 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-# Ratcheted as the engine grows: 70 at M1, 85 at M3. M14 gates the pipeline at 85.
+# Ratcheted as the engine grows: 70 at M1, 85 at M3.
+#
+# This gate applies to a run that can execute every line — that is, one with a
+# database, so the persistence layer is reachable. The offline selection
+# (`unit or contract`) opts out with `--cov-fail-under=0`: it cannot reach
+# `infrastructure/persistence`, and holding it to a whole-tree number would
+# measure the wrong thing.
 fail_under = 85
 exclude_lines = [
     "pragma: no cover",

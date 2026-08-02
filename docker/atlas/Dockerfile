@@ -65,6 +65,13 @@ RUN groupadd --system --gid 1001 atlas \
 
 COPY --from=builder --chown=atlas:atlas /opt/venv /opt/venv
 
+# Migrations ship with the image so a deployment can apply its own schema:
+#   docker compose exec atlas-api alembic upgrade head
+# Without these the image can run but never migrate, which is only discovered on
+# the first deploy to an empty database.
+COPY --chown=atlas:atlas services/atlas/alembic.ini /app/alembic.ini
+COPY --chown=atlas:atlas services/atlas/migrations /app/migrations
+
 WORKDIR /app
 USER atlas
 

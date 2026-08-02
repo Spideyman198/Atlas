@@ -64,7 +64,10 @@ function Show-Help {
         @('format',      'Apply ruff formatting and safe autofixes'),
         @('type',        'Run mypy in strict mode'),
         @('imports',     'Verify the architectural layering contracts'),
-        @('test',        'Run the offline test suite (unit + contract) with coverage'),
+        @('test',        'Run the offline test suite (unit + contract)'),
+        @('test-integration', 'Run integration tests against the running PostgreSQL'),
+        @('test-all',    'Run every test tier with the coverage gate'),
+        @('migrate',     'Apply Alembic migrations to the Atlas database'),
         @('check',       'Run everything CI runs'),
         @('clean',       'Stop the stack and DELETE all data')
     ) | ForEach-Object {
@@ -129,7 +132,17 @@ switch ($Target) {
     }
     'type'    { Invoke-Checked ($Tools + @('mypy')) }
     'imports' { Invoke-Checked ($Tools + @('lint-imports')) }
-    'test'    { Invoke-Checked ($Tools + @('pytest', '-m', 'unit or contract', '--cov', '--cov-report=term-missing')) }
+    'test'    { Invoke-Checked ($Tools + @('pytest', '-m', 'unit or contract', '--cov', '--cov-report=term-missing', '--cov-fail-under=0')) }
+
+    'test-integration' {
+        $dsn = "postgresql://$(Get-EnvValue 'POSTGRES_USER' 'odoo'):$(Get-EnvValue 'POSTGRES_PASSWORD' 'odoo_dev_password')@postgres:5432/postgres"
+        Invoke-Checked ($Compose + @('--profile', 'tools', 'run', '--rm', '-e', "ATLAS_TEST_DATABASE_URL=$dsn", 'atlas-tools', 'pytest', '-m', 'integration', '--no-cov'))
+    }
+
+    'test-all' {
+        $dsn = "postgresql://$(Get-EnvValue 'POSTGRES_USER' 'odoo'):$(Get-EnvValue 'POSTGRES_PASSWORD' 'odoo_dev_password')@postgres:5432/postgres"
+        Invoke-Checked ($Compose + @('--profile', 'tools', 'run', '--rm', '-e', "ATLAS_TEST_DATABASE_URL=$dsn", 'atlas-tools', 'pytest', '-m', 'unit or contract or integration', '--cov', '--cov-report=term-missing'))
+    }
 
     'check' {
         & $PSCommandPath 'lint'
