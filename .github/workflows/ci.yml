@@ -106,18 +106,31 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Verify the image starts and answers liveness
+        # No `--rm`: on failure the container must survive long enough for the
+        # log step below to read it. The cleanup step removes it either way.
+        #
+        # The offline providers are selected explicitly. The composition root
+        # builds providers at startup and refuses to start without a key, so a
+        # smoke test that only set a database URL would fail by design.
         run: |
-          docker run --rm --detach --name atlas-ci \
+          docker run --detach --name atlas-ci \
             --env ATLAS_DATABASE__URL=postgresql://atlas:atlas@127.0.0.1:5432/atlas \
+            --env ATLAS_CHAT__VENDOR=fake \
+            --env ATLAS_CHAT__MODEL=fake-model \
+            --env ATLAS_EMBEDDING__VENDOR=hash \
+            --env ATLAS_EMBEDDING__MODEL=hash-embedding-v1 \
             --publish 8000:8000 odoo-atlas/atlas:ci
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8000/healthz; then
               echo "" && echo "liveness ok after ${attempt}s" && exit 0
             fi
+            if [ -z "$(docker ps --quiet --filter name=atlas-ci)" ]; then
+              echo "engine exited during startup" >&2
+              break
+            fi
             sleep 1
           done
           echo "engine did not become live" >&2
-          docker logs atlas-ci >&2
           exit 1
 
       - name: Collect engine logs on failure
