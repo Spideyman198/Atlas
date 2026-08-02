@@ -1,8 +1,7 @@
 """HTTP entrypoint for the Atlas engine.
 
-M1 scope is deliberately narrow: the operational probes that prove the deployment
-topology of ``docs/adr/0002-sidecar-service-topology.md`` actually stands up. The
-domain, application and infrastructure layers arrive in M2.
+The application layer arrives with the milestones that need it; this module holds
+the wiring — lifespan, middleware, exception handlers — and the operational probes.
 
 The two probes answer different questions:
 
@@ -27,15 +26,18 @@ from typing import Final
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
-from psycopg_pool import AsyncConnectionPool
 
 from atlas import __version__
+from atlas.config.container import Container
+from atlas.config.logging import configure_logging
 from atlas.config.settings import get_settings
+from atlas.interfaces.http.errors import register_exception_handlers
+from atlas.interfaces.http.middleware import TraceIdMiddleware
 
 logger = logging.getLogger(__name__)
 
-#: Reported by the liveness probe. Deliberately a constant rather than a settings
-#: lookup: settings validation can fail, and liveness must never depend on it.
+#: Reported by the liveness probe. A constant rather than a settings lookup:
+#: settings validation can fail, and liveness must not depend on it.
 SERVICE_NAME: Final = "atlas-api"
 
 #: ADR-0004 relies on `hnsw.iterative_scan`, introduced in pgvector 0.8, to keep
@@ -50,35 +52,18 @@ router = APIRouter(tags=["operations"])
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Manage resources that outlive a single request."""
+    """Build the composition root and hold it for the process lifetime."""
     settings = get_settings()
-    logging.basicConfig(
-        level=settings.log_level,
-        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-    )
+    configure_logging(level=settings.log_level, json_output=settings.log_json)
 
-    # `wait=False` is the important part: the process must start even when
-    # PostgreSQL is not yet reachable, so that /healthz can answer and /readyz can
-    # report *why* traffic should not arrive. Blocking here would make a slow
-    # database look like a crashed service.
-    pool = AsyncConnectionPool(
-        conninfo=settings.database_url,
-        min_size=0,
-        max_size=4,
-        open=False,
-    )
-    await pool.open(wait=False)
-    app.state.pool = pool
+    container = await Container.create(settings)
+    app.state.container = container
 
-    logger.info(
-        "atlas engine started (version=%s env=%s)",
-        __version__,
-        settings.env,
-    )
+    logger.info("atlas engine started", extra={"version": __version__, "env": settings.env})
     try:
         yield
     finally:
-        await pool.close()
+        await container.aclose()
         logger.info("atlas engine stopped")
 
 
@@ -92,26 +77,26 @@ async def healthz() -> dict[str, str]:
 async def readyz(request: Request) -> JSONResponse:
     """Report whether the engine can serve traffic.
 
-    Returns ``200`` when every dependency check passes and ``503`` otherwise, with
-    a per-check breakdown so an operator can see which one failed without reading
-    logs.
+    Returns ``200`` when every check passes and ``503`` otherwise, with a
+    per-check breakdown so an operator can see which dependency failed without
+    reading logs.
     """
     checks: dict[str, str] = {}
-    pool: AsyncConnectionPool | None = getattr(request.app.state, "pool", None)
+    container: Container | None = getattr(request.app.state, "container", None)
 
-    if pool is None:
-        checks["database"] = "unavailable: connection pool not initialised"
+    if container is None:
+        checks["database"] = "unavailable: container not initialised"
     else:
         try:
             async with (
-                pool.connection(timeout=_READINESS_TIMEOUT_SECONDS) as connection,
+                container.pool.connection(timeout=_READINESS_TIMEOUT_SECONDS) as connection,
                 connection.cursor() as cursor,
             ):
                 await cursor.execute(_PGVECTOR_VERSION_QUERY)
                 row = await cursor.fetchone()
         except Exception as exc:  # noqa: BLE001 - a readiness probe must never raise
-            logger.warning("readiness check failed: %s", exc.__class__.__name__)
-            checks["database"] = f"unavailable: {exc.__class__.__name__}"
+            logger.warning("readiness check failed", extra={"error": type(exc).__name__})
+            checks["database"] = f"unavailable: {type(exc).__name__}"
         else:
             checks["database"] = "ok"
             checks["pgvector"] = _describe_pgvector(row[0] if row else None)
@@ -149,18 +134,20 @@ def _parse_version(raw: str) -> tuple[int, ...]:
 def create_app() -> FastAPI:
     """Build the FastAPI application.
 
-    A factory rather than a module-level singleton so tests can construct isolated
-    instances, and so M2 can inject a configured dependency container.
+    A factory rather than a module-level singleton, so tests can construct isolated
+    instances and a future entrypoint can inject a pre-built container.
     """
     app = FastAPI(
         title="Odoo Atlas Engine",
         description=(
-            "Retrieval, orchestration and generation engine for the Odoo Atlas copilot. "
-            "Internal service — never expose this API publicly."
+            "Retrieval, orchestration and generation engine for the Odoo Atlas "
+            "assistant. Internal service — do not expose this API publicly."
         ),
         version=__version__,
         lifespan=lifespan,
     )
+    app.add_middleware(TraceIdMiddleware)
+    register_exception_handlers(app)
     app.include_router(router)
     return app
 
