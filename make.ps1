@@ -64,7 +64,7 @@ function Show-Help {
         @('format',      'Apply ruff formatting and safe autofixes'),
         @('type',        'Run mypy in strict mode'),
         @('imports',     'Verify the architectural layering contracts'),
-        @('test',        'Run the unit test suite with coverage'),
+        @('test',        'Run the offline test suite (unit + contract) with coverage'),
         @('check',       'Run everything CI runs'),
         @('clean',       'Stop the stack and DELETE all data')
     ) | ForEach-Object {
@@ -129,7 +129,7 @@ switch ($Target) {
     }
     'type'    { Invoke-Checked ($Tools + @('mypy')) }
     'imports' { Invoke-Checked ($Tools + @('lint-imports')) }
-    'test'    { Invoke-Checked ($Tools + @('pytest', '-m', 'unit', '--cov', '--cov-report=term-missing')) }
+    'test'    { Invoke-Checked ($Tools + @('pytest', '-m', 'unit or contract', '--cov', '--cov-report=term-missing')) }
 
     'check' {
         & $PSCommandPath 'lint'

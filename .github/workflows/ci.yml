@@ -49,7 +49,7 @@ jobs:
         run: lint-imports
 
   test:
-    name: Unit tests
+    name: Unit and contract tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,8 +63,13 @@ jobs:
       - name: Install the engine and its toolchain
         run: pip install -e "services/atlas[dev]"
 
+      # Both tiers are offline — no network, no database, no API key — so both run
+      # on every push. Excluding `contract` would mean the suite that enforces
+      # adapter substitutability never gates a pull request.
       - name: pytest
-        run: pytest -m unit --cov --cov-report=term-missing --cov-report=xml --junitxml=junit.xml
+        run: |
+          pytest -m "unit or contract" \
+            --cov --cov-report=term-missing --cov-report=xml --junitxml=junit.xml
 
       - name: Upload coverage report
         if: always()
