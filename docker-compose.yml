@@ -17,7 +17,7 @@ name: odoo-atlas
 x-atlas-environment: &atlas-environment
   ATLAS_ENV: ${ATLAS_ENV:-development}
   ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-INFO}
-  ATLAS_DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${ATLAS_DB_NAME:-atlas}
+  ATLAS_DATABASE__URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${ATLAS_DB_NAME:-atlas}
   # Bind-mounted source takes precedence over the wheel baked into the image.
   # Removing this variable makes the container run purely from the image.
   PYTHONPATH: /app/src
@@ -124,9 +124,14 @@ services:
     volumes:
       - ./:/workspace
     environment:
+      # Required. import-linter resolves `atlas` by importing it, so without this
+      # it analyses the copy baked into the image at build time and reports a
+      # stale result — a contract can pass while the working tree violates it.
+      # pytest and mypy read the source directly, so only this tool depends on it.
+      PYTHONPATH: /workspace/services/atlas/src
       # Unit tests need no database; this satisfies fail-fast settings validation
       # for the handful of tests that construct Settings.
-      ATLAS_DATABASE_URL: postgresql://atlas:atlas@postgres:5432/atlas
+      ATLAS_DATABASE__URL: postgresql://atlas:atlas@postgres:5432/atlas
     entrypoint: []
     command: ["pytest"]
 

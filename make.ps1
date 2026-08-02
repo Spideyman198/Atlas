@@ -63,6 +63,7 @@ function Show-Help {
         @('lint',        'Run ruff (lint + format check)'),
         @('format',      'Apply ruff formatting and safe autofixes'),
         @('type',        'Run mypy in strict mode'),
+        @('imports',     'Verify the architectural layering contracts'),
         @('test',        'Run the unit test suite with coverage'),
         @('check',       'Run everything CI runs'),
         @('clean',       'Stop the stack and DELETE all data')
@@ -126,12 +127,14 @@ switch ($Target) {
         Invoke-Checked ($Tools + @('ruff', 'check', '--fix', '.'))
         Invoke-Checked ($Tools + @('ruff', 'format', '.'))
     }
-    'type' { Invoke-Checked ($Tools + @('mypy')) }
-    'test' { Invoke-Checked ($Tools + @('pytest', '-m', 'unit', '--cov', '--cov-report=term-missing')) }
+    'type'    { Invoke-Checked ($Tools + @('mypy')) }
+    'imports' { Invoke-Checked ($Tools + @('lint-imports')) }
+    'test'    { Invoke-Checked ($Tools + @('pytest', '-m', 'unit', '--cov', '--cov-report=term-missing')) }
 
     'check' {
         & $PSCommandPath 'lint'
         & $PSCommandPath 'type'
+        & $PSCommandPath 'imports'
         & $PSCommandPath 'test'
     }
 

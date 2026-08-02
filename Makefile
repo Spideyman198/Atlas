@@ -98,12 +98,16 @@ format: ## Apply ruff formatting and safe autofixes
 type: ## Run mypy in strict mode
 	$(TOOLS) mypy
 
+.PHONY: imports
+imports: ## Verify the architectural layering contracts
+	$(TOOLS) lint-imports
+
 .PHONY: test
 test: ## Run the unit test suite with coverage
 	$(TOOLS) pytest -m unit --cov --cov-report=term-missing
 
 .PHONY: check
-check: lint type test ## Run everything CI runs
+check: lint type imports test ## Run everything CI runs
 
 # --- teardown --------------------------------------------------------------
 

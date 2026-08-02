@@ -54,6 +54,8 @@ select = [
 ignore = [
     "D203",   # conflicts with D211; we use D211 (no blank line before class docstring)
     "D213",   # conflicts with D212; we use D212 (summary on the first line)
+    "D105",   # dunder semantics come from the protocol, not from a restated docstring
+    "D107",   # __init__ is documented by its class docstring, not twice
     "COM812", # trailing-comma rules fight the formatter
     "ISC001", # implicit string concat rule fights the formatter
     "TRY003", # long messages inside raise are fine and more readable than constants
@@ -63,7 +65,15 @@ ignore = [
 # Tests assert and use magic numbers freely. `D1` (missing-docstring) is off
 # because a well-named test function is its own documentation — docstrings are
 # still used where a test needs to explain *why*, just never mandated.
-"services/atlas/tests/**" = ["S101", "PLR2004", "D1", "ARG001"]
+"services/atlas/tests/**" = [
+    "S101",    # asserting is the point
+    "PLR2004", # expected values inline are clearer than named constants
+    "D1",      # a well-named test documents itself
+    "ARG001",  # fixtures are often requested for their side effect
+    "ANN401",  # test helpers legitimately take **kwargs: Any
+    "EM101",   # raising a literal is fine when constructing a failure case
+    "TRY301",  # ditto
+]
 # Odoo addons follow Odoo's conventions, not ours: field definitions are mutable
 # class attributes by design, and the framework supplies most docstring context.
 "addons/**" = ["D", "ANN", "RUF012", "A003", "PLR0913"]
@@ -103,6 +113,58 @@ enable_error_code = [
 init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
+
+# ============================== import-linter ==============================
+# The layering rules from docs/architecture/01-overview.md, enforced. These are
+# the reason the architecture documentation can be trusted: a violation fails the
+# build rather than surviving review.
+[tool.importlinter]
+root_package = "atlas"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Domain is independent of every other layer"
+type = "forbidden"
+source_modules = ["atlas.domain"]
+forbidden_modules = [
+    "atlas.application",
+    "atlas.infrastructure",
+    "atlas.interfaces",
+    "atlas.config",
+]
+
+[[tool.importlinter.contracts]]
+name = "Application depends on ports, never on adapters"
+type = "forbidden"
+source_modules = ["atlas.application"]
+forbidden_modules = [
+    "atlas.infrastructure",
+    "atlas.interfaces",
+    "atlas.config",
+]
+
+[[tool.importlinter.contracts]]
+# ADR-0002. The engine reaches Odoo over HTTP, never by importing it.
+name = "The engine never imports odoo"
+type = "forbidden"
+source_modules = ["atlas"]
+forbidden_modules = ["odoo"]
+
+[[tool.importlinter.contracts]]
+# ADR-0003. LlamaIndex is one implementation of ports the domain owns, so it stays
+# in one package and is reached through those ports.
+name = "LlamaIndex is confined to its adapter package"
+type = "forbidden"
+source_modules = ["atlas"]
+forbidden_modules = ["llama_index"]
+ignore_imports = [
+    "atlas.infrastructure.llamaindex -> llama_index",
+    "atlas.infrastructure.llamaindex -> llama_index.**",
+    "atlas.infrastructure.llamaindex.** -> llama_index",
+    "atlas.infrastructure.llamaindex.** -> llama_index.**",
+]
+# The adapter package arrives in M7; until then these exemptions match nothing.
+unmatched_ignore_imports_alerting = "none"
 
 # ================================= pytest ==================================
 [tool.pytest.ini_options]
