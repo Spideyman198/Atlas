@@ -18,6 +18,15 @@ x-atlas-environment: &atlas-environment
   ATLAS_ENV: ${ATLAS_ENV:-development}
   ATLAS_LOG_LEVEL: ${ATLAS_LOG_LEVEL:-INFO}
   ATLAS_DATABASE__URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${ATLAS_DB_NAME:-atlas}
+  # Defaults are the offline providers so the stack starts without an account.
+  # See .env.example for switching to a real vendor.
+  ATLAS_CHAT__VENDOR: ${ATLAS_CHAT__VENDOR:-fake}
+  ATLAS_CHAT__MODEL: ${ATLAS_CHAT__MODEL:-fake-model}
+  ATLAS_CHAT__API_KEY: ${ANTHROPIC_API_KEY:-}
+  ATLAS_EMBEDDING__VENDOR: ${ATLAS_EMBEDDING__VENDOR:-hash}
+  ATLAS_EMBEDDING__MODEL: ${ATLAS_EMBEDDING__MODEL:-hash-embedding-v1}
+  ATLAS_EMBEDDING__DIMENSIONS: ${ATLAS_EMBEDDING__DIMENSIONS:-1536}
+  ATLAS_EMBEDDING__API_KEY: ${OPENAI_API_KEY:-}
   # Bind-mounted source takes precedence over the wheel baked into the image.
   # Removing this variable makes the container run purely from the image.
   PYTHONPATH: /app/src

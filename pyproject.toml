@@ -73,13 +73,20 @@ ignore = [
     "ANN401",  # test helpers legitimately take **kwargs: Any
     "EM101",   # raising a literal is fine when constructing a failure case
     "TRY301",  # ditto
+    "PLC0415", # imports inside a test keep an optional SDK out of collection
 ]
 # Adapters implement documented ports. The contract — arguments, guarantees,
 # exceptions — is stated once on the Protocol in `atlas.domain.ports`; repeating
 # it on every implementation produces docstrings that restate the method name and
 # drift from the port they claim to describe. Docstrings are still used here
 # wherever an adapter has something of its own to explain.
-"services/atlas/src/atlas/infrastructure/**" = ["D102"]
+"services/atlas/src/atlas/infrastructure/**" = [
+    "D102",
+    # Vendor SDK responses are untyped payloads. Converting `Any` into typed
+    # domain objects is precisely what an adapter is for, so the boundary is
+    # where `Any` belongs.
+    "ANN401",
+]
 # Odoo addons follow Odoo's conventions, not ours: field definitions are mutable
 # class attributes by design, and the framework supplies most docstring context.
 "addons/**" = ["D", "ANN", "RUF012", "A003", "PLR0913"]
@@ -114,6 +121,12 @@ enable_error_code = [
     "truthy-bool",
     "possibly-undefined",
 ]
+
+[[tool.mypy.overrides]]
+# voyageai re-exports its client without declaring `__all__`, which strict mode
+# treats as a private import. The class is public and documented.
+module = ["voyageai.*"]
+implicit_reexport = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
@@ -176,7 +189,9 @@ unmatched_ignore_imports_alerting = "none"
 [tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = ["services/atlas/tests"]
-pythonpath = ["services/atlas/src"]
+# `services/atlas` puts `tests.support` on the path so stubs can be shared
+# between the adapter unit tests and the contract registrations.
+pythonpath = ["services/atlas/src", "services/atlas"]
 addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
 # The engine is async throughout, so async test functions run without a per-test
 # marker. `--strict-markers` still applies to our own markers below.
@@ -185,6 +200,7 @@ markers = [
     "unit: fast and isolated — no network, no database, no API key",
     "integration: requires a real PostgreSQL instance",
     "contract: asserts every adapter of a port behaves identically",
+    "live: calls a real provider; needs API keys and costs money. Never on a PR",
     "slow: takes longer than a second",
 ]
 filterwarnings = ["error"]
