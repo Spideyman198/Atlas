@@ -60,9 +60,14 @@ _PRICES: Final[dict[str, ModelPrice]] = {
     "claude-opus-4-8": ModelPrice.anthropic("5.00", "25.00"),
     "claude-sonnet-5": ModelPrice.anthropic("3.00", "15.00"),
     "claude-haiku-4-5": ModelPrice.anthropic("1.00", "5.00"),
-    # --- OpenAI embeddings (unverified, confirm at M3b) ---
+    # --- OpenAI (unverified against a live account; see the note above) ---
     "text-embedding-3-small": ModelPrice(Decimal("0.02"), Decimal(0)),
     "text-embedding-3-large": ModelPrice(Decimal("0.13"), Decimal(0)),
+    "gpt-4o": ModelPrice(Decimal("2.50"), Decimal("10.00")),
+    "gpt-4o-mini": ModelPrice(Decimal("0.15"), Decimal("0.60")),
+    # --- Voyage (unverified against a live account) ---
+    "voyage-3": ModelPrice(Decimal("0.06"), Decimal(0)),
+    "voyage-3-lite": ModelPrice(Decimal("0.02"), Decimal(0)),
     # --- Test doubles: free, so a fake never contributes to a cost assertion ---
     "fake-model": ModelPrice(Decimal(0), Decimal(0)),
     "hash-embedding-v1": ModelPrice(Decimal(0), Decimal(0)),
