@@ -26,19 +26,19 @@ Two properties of this picture carry most of the design:
 
 ```mermaid
 flowchart TB
-    owl[OWL chat component] -->|JSON-RPC| addon
-    cron[ir.cron sync trigger] --> addon
-    addon[odoo_atlas addon] -->|HTTP and service token| iface
-    iface[interfaces: routers and CLI] --> app
-    app[application: use cases] --> dom
+    owl["OWL chat component"] -->|JSON-RPC| addon
+    cron["ir.cron sync trigger"] --> addon
+    addon["odoo_atlas addon"] -->|HTTP and service token| iface
+    iface["interfaces - routers and CLI"] --> app
+    app["application - use cases"] --> dom
     app --> infra
-    dom[domain: entities and ports]
-    infra[infrastructure: adapters] -.->|implements ports| dom
+    dom["domain - entities and ports"]
+    infra["infrastructure - adapters"] -.->|implements ports| dom
     infra -->|authorized reads| addon
-    addon --> dbodoo[Odoo database]
-    infra --> dbatlas[Atlas database with pgvector]
-    infra --> llm[LLM provider]
-    infra --> emb[Embedding provider]
+    addon --> dbodoo["Odoo database"]
+    infra --> dbatlas["Atlas database with pgvector"]
+    infra --> llm["LLM provider"]
+    infra --> emb["Embedding provider"]
 ```
 
 The dashed arrow is the **Dependency Inversion Principle** drawn literally:

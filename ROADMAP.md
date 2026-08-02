@@ -7,7 +7,7 @@ can be reviewed on its own; none depends on a later milestone to make sense.
 | --- | --- | --- |
 | M0 | Project planning and architecture | Done |
 | M1 | Development environment and toolchain | Done |
-| M2 | Engine foundations | Planned |
+| M2 | Engine foundations | Done |
 | M3 | Provider abstraction layer | Planned |
 | M4 | Vector store and persistence | Planned |
 | M5 | Odoo addon skeleton | Planned |
@@ -57,16 +57,21 @@ clean machine, and `make check` passes.
 
 ## M2 — Engine foundations
 
-- Package skeleton: `domain`, `application`, `infrastructure`, `interfaces`, `config`
-- Typed settings with fail-fast validation
-- Structured JSON logging with `trace_id` propagation through `contextvars`
-- Exception taxonomy mapped to HTTP responses
-- Composition root — the only module that binds adapters to ports
-- `import-linter` contracts: `domain` imports nothing else from `atlas`; nothing
-  imports `odoo`; nothing outside `infrastructure.llamaindex` imports `llama_index`
+Status: done.
 
-Acceptance: `mypy --strict` and `lint-imports` pass, so the layering rules are
-enforced by CI rather than by review.
+- Package skeleton: `domain`, `application`, `infrastructure`, `interfaces`, `config`
+- Typed settings with fail-fast validation, grouped by concern
+  (`ATLAS_DATABASE__URL`)
+- Structured JSON logging with `trace_id` propagation, including uvicorn access logs
+- Error taxonomy in the domain, mapped to RFC 9457 problem documents at the HTTP
+  boundary
+- Composition root owning process-wide resources
+- Four `import-linter` contracts: domain independence, application depends on ports
+  only, the engine never imports `odoo`, and `llama_index` stays in its adapter
+  package
+
+Acceptance: `mypy --strict` and `lint-imports` pass, and a deliberate violation is
+shown to break the relevant contract rather than pass silently.
 
 ## M3 — Provider abstraction layer
 

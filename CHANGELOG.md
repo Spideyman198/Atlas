@@ -10,6 +10,29 @@ keys — may change between milestones. Breaking changes are called out explicit
 
 ### Added
 
+Engine foundations (M2):
+
+- Layered package skeleton: `domain`, `application`, `infrastructure`,
+  `interfaces`, `config`.
+- Error taxonomy in `atlas.domain.errors`. Errors carry a stable `code` and
+  structured context but no HTTP status; the transport mapping lives at the HTTP
+  boundary so the same errors are usable from the CLI and the ingestion worker.
+- RFC 9457 problem documents for error responses, served as
+  `application/problem+json` and carrying `code` and `trace_id`. Unexpected
+  exceptions return a generic 500 without leaking the message.
+- Structured JSON logging with request correlation. `TraceIdMiddleware` adopts an
+  inbound `X-Request-ID` or mints one, binds it for the request, and echoes it on
+  the response. Uvicorn's own loggers are rerouted so access logs are structured
+  and correlated too.
+- Composition root in `atlas.config.container`, owning the lifetime of
+  process-wide resources.
+- Settings grouped by concern with a nested env delimiter
+  (`ATLAS_DATABASE__URL`, `ATLAS_DATABASE__POOL_MAX_SIZE`), plus pool sizing and
+  connect timeout.
+- Four `import-linter` contracts enforcing the layering, wired into `make check`
+  and CI.
+- [Developer guide](docs/developer-guide.md).
+
 Development environment (M1):
 
 - Compose stack: PostgreSQL 17 with pgvector 0.8.6, Odoo 19 CE pinned to
@@ -49,6 +72,10 @@ Planning and architecture (M0):
 
 ### Changed
 
+- The engine's database setting moved from `ATLAS_DATABASE_URL` to
+  `ATLAS_DATABASE__URL` when settings were grouped by concern (M2). Deployments
+  setting it directly must rename the variable; `docker-compose.yml` and CI are
+  already updated.
 - ADR-0003 was revised during M0 review. The original proposal — own the retrieval
   orchestration with no general-purpose framework — was rejected. Atlas now uses
   LlamaIndex as an infrastructure-layer implementation of domain-owned ports,
