@@ -9,7 +9,7 @@ can be reviewed on its own; none depends on a later milestone to make sense.
 | M1 | Development environment and toolchain | Done |
 | M2 | Engine foundations | Done |
 | M3a | Provider ports, fakes and resilience | Done |
-| M3b | Vendor adapters (Anthropic, OpenAI, Voyage) | Planned |
+| M3b | Vendor adapters (Anthropic, OpenAI, Voyage) | Done |
 | M4 | Vector store and persistence | Planned |
 | M5 | Odoo addon skeleton | Planned |
 | M6 | Odoo gateway and authorization | Planned |
@@ -95,16 +95,22 @@ preserve provider identity.
 
 ## M3b — Vendor adapters
 
-- Anthropic adapter (`claude-opus-5` and siblings): adaptive thinking, effort,
-  tool calling, streaming, refusal handling
-- OpenAI adapter, including Azure via base-URL override
-- Voyage embedding adapter
-- Each registered against the M3a contract suites
-- Verified pricing for the OpenAI and Voyage entries
-- Provider settings and composition-root wiring
+Status: done.
+
+- Anthropic chat adapter: adaptive thinking, effort mapped to `output_config`,
+  tool calling, streaming, refusal as a stop reason
+- OpenAI chat and embedding adapters, Azure reachable via base-URL override
+- Voyage embedding adapter, honouring the document/query distinction
+- All five registered against the M3a contract suites, driven by stub SDK clients
+- Provider settings and composition-root wiring, validated at startup
+- Live contract suite marked `live`, key-gated, excluded from pull requests
 
 Acceptance: switching provider by environment variable changes no application
-code, and every adapter passes the same contract suite.
+code; every adapter passes the same contract suite; a missing key, unpriced model
+or dimension mismatch stops the engine at boot.
+
+Carried into M14: verify the OpenAI and Voyage pricing entries against live
+accounts, and schedule the `live` suite nightly with repository secrets.
 
 ## M4 — Vector store and persistence
 

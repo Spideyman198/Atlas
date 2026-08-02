@@ -10,6 +10,34 @@ keys — may change between milestones. Breaking changes are called out explicit
 
 ### Added
 
+Vendor adapters (M3b):
+
+- Anthropic chat adapter. Sends `output_config.effort` and adaptive thinking,
+  and sends no sampling parameters — `temperature`, `top_p` and `top_k` are
+  rejected with a 400 by current models, as is `thinking.budget_tokens`. Folds
+  `system`-role messages into the system parameter, renders tool results as
+  user-role content blocks, drops thinking blocks from the answer, and maps a
+  safety refusal onto a stop reason rather than an exception.
+- OpenAI chat and embedding adapters over the Chat Completions API. Azure is
+  reached through the same client with a base-URL override. Tool arguments are
+  parsed from JSON strings, cached tokens are subtracted from `prompt_tokens` so
+  the usage fields stay disjoint, and streamed responses request usage
+  explicitly.
+- Voyage embedding adapter, sending `input_type` so the document/query
+  distinction reaches the vendor, and requesting `output_dimension` rather than
+  assuming it.
+- All five adapters registered against the M3a contract suites, driven by stub
+  SDK clients — substitutability is checked at build time, not asserted.
+- `atlas.config.providers`: the only module naming a concrete adapter. Wraps
+  every chat provider as `Accounting(Retrying(adapter))` and disables the vendor
+  SDKs' own retrying so there is one backoff policy rather than two.
+- Provider settings (`ATLAS_CHAT__*`, `ATLAS_EMBEDDING__*`) including the
+  offline `fake`/`hash` vendors, so the stack starts with no account.
+- Providers are built in the composition root, so a missing API key, an unpriced
+  model, or a dimension that disagrees with the provider stops the engine at
+  startup.
+- Live contract suite marked `live` and key-gated, excluded from pull requests.
+
 Provider ports and resilience (M3a):
 
 - `ChatProvider` and `EmbeddingProvider` ports, with the domain vocabulary they
