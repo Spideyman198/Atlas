@@ -92,6 +92,9 @@ Planning and architecture (M0):
 
 ### Changed
 
+- CI and `make test` now run `-m "unit or contract"` rather than `-m unit`. Both
+  tiers are offline, and excluding `contract` meant the suite that enforces
+  adapter substitutability never gated a pull request.
 - Coverage floor raised from 70% to 85% (M3a). Actual coverage is 90%.
 - The engine's database setting moved from `ATLAS_DATABASE_URL` to
   `ATLAS_DATABASE__URL` when settings were grouped by concern (M2). Deployments
