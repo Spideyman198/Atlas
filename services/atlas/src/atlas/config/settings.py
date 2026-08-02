@@ -12,11 +12,17 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 Environment = Literal["development", "staging", "production"]
+
+#: `fake` and `hash` select the offline providers. They are configuration values
+#: rather than a test-only import so an air-gapped demo or a smoke environment can
+#: run the whole stack without a vendor account.
+ChatVendor = Literal["anthropic", "openai", "fake"]
+EmbeddingVendor = Literal["openai", "voyage", "hash"]
 
 
 class DatabaseSettings(BaseModel):
@@ -38,6 +44,58 @@ class DatabaseSettings(BaseModel):
     )
     pool_max_size: int = Field(default=8, ge=1)
     connect_timeout_seconds: float = Field(default=5.0, gt=0)
+
+
+class ChatSettings(BaseModel):
+    """Which model answers questions, and how it is reached."""
+
+    model_config = {"frozen": True}
+
+    vendor: ChatVendor = "anthropic"
+    model: str = "claude-opus-5"
+    api_key: SecretStr | None = None
+    base_url: str | None = Field(
+        default=None,
+        description="Override the API host. This is how Azure OpenAI is reached.",
+    )
+    timeout_seconds: float = Field(default=60.0, gt=0)
+    max_retries: int = Field(
+        default=3,
+        ge=1,
+        description=(
+            "Total attempts including the first. Applied by the Atlas retry "
+            "decorator; the vendor SDK's own retrying is disabled so there is one "
+            "backoff policy rather than two multiplying together."
+        ),
+    )
+    max_output_tokens: int = Field(
+        default=8192,
+        gt=0,
+        description=(
+            "Caps reasoning and answer together on current models, so a tight "
+            "budget truncates mid-response rather than shortening the answer."
+        ),
+    )
+
+
+class EmbeddingSettings(BaseModel):
+    """Which model produces vectors, and the shape they must have."""
+
+    model_config = {"frozen": True}
+
+    vendor: EmbeddingVendor = "openai"
+    model: str = "text-embedding-3-small"
+    api_key: SecretStr | None = None
+    dimensions: int = Field(
+        default=1536,
+        gt=0,
+        description=(
+            "Baked into the pgvector column type. Changing it is a re-index, not "
+            "a configuration change (ADR-0005)."
+        ),
+    )
+    max_batch_size: int = Field(default=96, gt=0)
+    timeout_seconds: float = Field(default=30.0, gt=0)
 
 
 class Settings(BaseSettings):
@@ -65,6 +123,8 @@ class Settings(BaseSettings):
     )
 
     database: DatabaseSettings
+    chat: ChatSettings = ChatSettings()
+    embedding: EmbeddingSettings = EmbeddingSettings()
 
     @property
     def is_production(self) -> bool:

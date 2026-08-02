@@ -16,7 +16,10 @@ from typing import Self
 
 from psycopg_pool import AsyncConnectionPool
 
+from atlas.config.providers import build_providers
 from atlas.config.settings import Settings, get_settings
+from atlas.domain.ports.chat import ChatProvider
+from atlas.domain.ports.embedding import EmbeddingProvider
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +31,17 @@ class Container:
     async context manager.
     """
 
-    def __init__(self, settings: Settings, pool: AsyncConnectionPool) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        pool: AsyncConnectionPool,
+        chat: ChatProvider,
+        embedding: EmbeddingProvider,
+    ) -> None:
         self._settings = settings
         self._pool = pool
+        self._chat = chat
+        self._embedding = embedding
 
     @property
     def settings(self) -> Settings:
@@ -41,6 +52,16 @@ class Container:
     def pool(self) -> AsyncConnectionPool:
         """Connection pool for the Atlas database."""
         return self._pool
+
+    @property
+    def chat(self) -> ChatProvider:
+        """The configured chat provider, wrapped in its decorator stack."""
+        return self._chat
+
+    @property
+    def embedding(self) -> EmbeddingProvider:
+        """The configured embedding provider."""
+        return self._embedding
 
     @classmethod
     async def create(cls, settings: Settings | None = None) -> Self:
@@ -54,6 +75,11 @@ class Container:
         resolved = settings if settings is not None else get_settings()
         database = resolved.database
 
+        # Built first: a missing API key, an unpriced model or a dimension
+        # mismatch should stop the process here rather than surface on the first
+        # user request.
+        chat, embedding = build_providers(resolved)
+
         pool = AsyncConnectionPool(
             conninfo=database.url,
             min_size=database.pool_min_size,
@@ -65,9 +91,17 @@ class Container:
 
         logger.info(
             "container built",
-            extra={"env": resolved.env, "pool_max_size": database.pool_max_size},
+            extra={
+                "env": resolved.env,
+                "pool_max_size": database.pool_max_size,
+                "chat_provider": chat.name,
+                "chat_model": chat.model,
+                "embedding_provider": embedding.name,
+                "embedding_model": embedding.model_id,
+                "embedding_dimensions": embedding.dimensions,
+            },
         )
-        return cls(resolved, pool)
+        return cls(resolved, pool, chat, embedding)
 
     async def aclose(self) -> None:
         """Release every resource the container owns."""
