@@ -11,7 +11,12 @@ without a provider.
 
 from __future__ import annotations
 
+from typing import cast
+
+import anthropic
+import openai
 import pytest
+from tests.support.stubs import StubAnthropicClient, StubOpenAIClient
 
 from atlas.domain.chat import (
     ChatRequest,
@@ -23,7 +28,13 @@ from atlas.domain.chat import (
     ToolDefinition,
 )
 from atlas.domain.ports.chat import ChatProvider
+from atlas.infrastructure.providers.anthropic_provider import AnthropicChatProvider
 from atlas.infrastructure.providers.fakes import FakeChatProvider, fake_response
+from atlas.infrastructure.providers.openai_provider import OpenAIChatProvider
+from atlas.infrastructure.providers.resilience import (
+    AccountingChatProvider,
+    RetryingChatProvider,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -152,3 +163,42 @@ class TestFakeChatProvider(ChatProviderContract):
 
         assert response.is_refusal
         assert not response.requires_tool_execution
+
+
+class TestAnthropicChatProvider(ChatProviderContract):
+    """The Anthropic adapter, driven by a stub SDK client.
+
+    Registering it here is what makes substitutability a build-time fact rather
+    than a claim: any behaviour that diverges from the fake fails this suite.
+    """
+
+    @pytest.fixture
+    def provider(self) -> ChatProvider:
+        return AnthropicChatProvider(
+            cast("anthropic.AsyncAnthropic", StubAnthropicClient()),
+            model="claude-opus-5",
+        )
+
+
+class TestOpenAIChatProvider(ChatProviderContract):
+    """The OpenAI adapter, driven by a stub SDK client."""
+
+    @pytest.fixture
+    def provider(self) -> ChatProvider:
+        return OpenAIChatProvider(cast("openai.AsyncOpenAI", StubOpenAIClient()), model="gpt-4o")
+
+
+class TestDecoratedProvider(ChatProviderContract):
+    """The stack the composition root actually builds.
+
+    Decorators are themselves providers, so the wrapped form must satisfy the
+    same contract as the adapter inside it.
+    """
+
+    @pytest.fixture
+    def provider(self) -> ChatProvider:
+        adapter = AnthropicChatProvider(
+            cast("anthropic.AsyncAnthropic", StubAnthropicClient()),
+            model="claude-opus-5",
+        )
+        return AccountingChatProvider(RetryingChatProvider(adapter))

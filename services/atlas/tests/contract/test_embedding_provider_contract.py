@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from typing import cast
+
+import openai
 import pytest
+import voyageai
+from tests.support.stubs import StubOpenAIClient, StubVoyageClient
 
 from atlas.domain.embedding import EmbeddingPurpose
 from atlas.domain.errors import ValidationError
 from atlas.domain.ports.embedding import EmbeddingProvider
 from atlas.infrastructure.providers.fakes import HashEmbeddingProvider
+from atlas.infrastructure.providers.openai_provider import OpenAIEmbeddingProvider
+from atlas.infrastructure.providers.voyage_provider import VoyageEmbeddingProvider
 
 pytestmark = pytest.mark.contract
 
@@ -103,3 +110,44 @@ class TestHashEmbeddingProvider(EmbeddingProviderContract):
     def test_a_non_positive_dimension_is_rejected(self) -> None:
         with pytest.raises(ValidationError):
             HashEmbeddingProvider(dimensions=0)
+
+
+class TestOpenAIEmbeddingProvider(EmbeddingProviderContract):
+    """The OpenAI adapter, driven by a stub SDK client."""
+
+    @pytest.fixture
+    def provider(self) -> EmbeddingProvider:
+        return OpenAIEmbeddingProvider(
+            cast("openai.AsyncOpenAI", StubOpenAIClient()),
+            model="text-embedding-3-small",
+            dimensions=64,
+            max_batch_size=8,
+        )
+
+
+class TestVoyageEmbeddingProvider(EmbeddingProviderContract):
+    """The Voyage adapter, driven by a stub SDK client."""
+
+    @pytest.fixture
+    def provider(self) -> EmbeddingProvider:
+        return VoyageEmbeddingProvider(
+            cast("voyageai.AsyncClient", StubVoyageClient(dimensions=64)),
+            model="voyage-3",
+            dimensions=64,
+            max_batch_size=8,
+        )
+
+    async def test_the_purpose_is_sent_as_an_input_type(self) -> None:
+        """The purpose must reach the vendor.
+
+        Voyage embeds documents and queries differently, and using the wrong side
+        measurably degrades recall.
+        """
+        client = StubVoyageClient(dimensions=64)
+        provider = VoyageEmbeddingProvider(
+            cast("voyageai.AsyncClient", client), dimensions=64, model="voyage-3"
+        )
+
+        await provider.embed(["text"], EmbeddingPurpose.QUERY)
+
+        assert client.calls[0]["input_type"] == "query"
