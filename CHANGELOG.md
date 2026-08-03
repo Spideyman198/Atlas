@@ -10,6 +10,129 @@ keys — may change between milestones. Breaking changes are called out explicit
 
 ### Added
 
+Chat panel (M11):
+
+- An OWL client action: message list with a streaming renderer, composer,
+  conversation sidebar with search, and loading, error and retry states.
+  Documented in [docs/chat-ui.md](docs/chat-ui.md).
+- `/atlas/chat/ask`, which mints the context token server-side and relays the
+  engine's events to the browser. The browser never holds a token: it is a
+  bearer credential, and a page holding one hands it to every script in that
+  page.
+- Citation chips that open the record they name. A citation with no resolvable
+  target is dropped rather than rendered, because a chip that opens nothing
+  looks like evidence until it is clicked.
+- Suggested questions derived from which modules are installed and what the
+  acting user may read, so nobody is offered a question that comes back as a
+  refusal.
+- The question is stored before the stream opens and the answer when it closes,
+  so a dropped connection loses the answer and keeps the question.
+- Google Chrome and `websocket-client` in the Odoo image, for browser tests.
+
+Orchestration and answer synthesis (M10):
+
+- `AnswerService`: route, gather, generate, resolve citations. One path serves
+  both the streamed and the assembled answer, so the UI cannot behave
+  differently from the tests. Documented in
+  [docs/orchestration.md](docs/orchestration.md).
+- Nothing to ground on means the model is not called. No retrieved context and
+  no available tool produces a refusal, which covers the case where
+  authorization emptied the context and the case where a provider cannot call
+  tools. A request to change data is refused before anything is fetched.
+- An intent router over four routes — structured, semantic, hybrid, refuse —
+  with rules only for questions a rule can recognise and hybrid for everything
+  else. A wrong route costs latency; hybrid costs latency too and cannot be
+  wrong for it.
+- A Jinja2 prompt library behind a port, versioned by content hash. A
+  hand-maintained number gets forgotten on the edit that mattered; a hash cannot
+  go stale. Every answer records the prompt identity that produced it.
+- Prompt-injection resistance with a property behind it: retrieved text cannot
+  forge the context fence, because no rendered variable may contain the marker.
+  The system prompt's instruction to treat retrieved records as data is worth
+  what the fence is hard to forge.
+- Citations resolved from markers rather than accepted. A marker naming a block
+  that was never in the prompt is removed from the answer — a reference a reader
+  cannot follow looks like evidence.
+- A bounded tool loop, five rounds, feeding results back to the model.
+- Conversation memory that keeps recent turns verbatim and summarises older
+  ones, split by token size rather than turn count. A failed summary drops the
+  history rather than the answer.
+- `POST /v1/chat`, streaming server-sent events. A failure after the first byte
+  arrives as an `error` event, because the status line is long gone.
+
+Structured query tools (M9):
+
+- Five tools reading live Odoo through the ORM: `find_records`, `aggregate`,
+  `stock_levels`, `overdue_invoices` and `customer_360`. Each runs in the acting
+  user's environment, so record rules apply without the tools arranging for it.
+  Documented in [docs/tools.md](docs/tools.md).
+- A filter compiler. The model emits `{field, operator, value}` objects, never a
+  domain — a domain can traverse relations to fields on no allow-list, and the
+  set of expressible queries should be one we chose rather than one we inherited.
+- Per-model allow-lists for fields, measures, groupable columns and the module
+  each needs, with caps on rows, filters, list values, text length and grouping
+  depth.
+- A tool is only offered when its models are installed and the acting user can
+  read them, so a model is never told about a call that could only ever fail.
+- `ToolBox` on the engine side. A rejected argument comes back as a tool result
+  the model can retry from; an unreachable Odoo does not, because no retry fixes
+  it.
+- Tool results are JSON before they leave the process — ISO dates, `[id, name]`
+  pairs — so a tool called in a test returns what a tool called over the wire
+  returns.
+- A read-only scan over the tool package for `create`, `write`, `unlink`,
+  `copy`, `sudo` and `execute`, plus a test that the scan would catch them.
+
+Retrieval engine (M8):
+
+- Hybrid retrieval: dense and lexical search over the same chunks, combined with
+  reciprocal rank fusion. Their scores share no scale, so fusion uses only the
+  positions — which is how an identifier and a sentence can be the same question.
+  Documented in [docs/retrieval.md](docs/retrieval.md).
+- A diversity pass, so the top of a result list stops being the same fact eight
+  times. Similarity is over words rather than vectors, which needs no extra
+  round-trip and covers the lexical half of the results too.
+- `RetrievalPipeline`: retrieve, authorize, assemble. The middle stage cannot be
+  skipped — `PromptContext` is constructible only from `AuthorizedChunk`, and a
+  test runs `mypy --strict` over a fixture that tries to bypass it.
+- Token-budgeted assembly. A chunk that does not fit is skipped rather than
+  truncated, and a smaller one further down can still fit.
+- Citations built from the assembled context, one per record. Nothing a model
+  produces becomes a citation, so a citation cannot be hallucinated.
+- `AtlasLlamaVectorStore`, `AtlasLlamaEmbedding` and `AtlasLlamaLLM`. The last
+  is load-bearing rather than decorative: without it `QueryFusionRetriever`
+  resolves `Settings.llm` and reaches for LlamaIndex's OpenAI integration, which
+  is the second-vendor-path failure ADR-0003 inverts the dependency to prevent.
+- `Reranker` port with a no-op default, and a written reason for why no
+  cross-encoder ships yet.
+
+### Fixed
+
+- Browser tests were being skipped rather than run. Odoo skips a tour when it
+  cannot find a browser or `websocket-client`, and a skip is not a failure — the
+  first version of the chat tours reported green having exercised nothing. A
+  test now asserts both are present, so the same situation is a red build.
+- The chat endpoint read the trace id from `request.state`, where the middleware
+  does not put it, so every answer carried `trace_id: null` — and an answer with
+  no trace id cannot be lined up against Odoo's access log, which is the one
+  thing the id is for. Found by calling the running engine, not by a test.
+- Enumerating the cross product of fields, operators and values against the
+  filter compiler found four ways to compile a domain the database or the ORM
+  then rejected: an `in` list whose elements were the wrong type, an ordering
+  operator against `None`, a text operator against a boolean, and a numeric
+  field compared to `True`. Each was a 500 where a rejected tool call was
+  wanted. All four are now refused with a message naming what is allowed.
+- The development environment never loaded demo data. Odoo 19 turned
+  `--without-demo` into the default and added `--with-demo` as the opt-in, so
+  the bootstrap's flag was on the wrong branch: the log said the database had
+  been seeded and it came up empty.
+- The engine package shipped no `py.typed`, so anything type-checking against
+  Atlas treated it as untyped.
+- `InMemoryVectorStore` handed every chunk the id `0`. LlamaIndex identifies
+  nodes by id, so a result set of several collapsed into one on its way through
+  fusion — silently, as missing results rather than an error. Ids are now unique
+  across the store, the way PostgreSQL issues them.
+
 Ingestion pipeline (M7):
 
 - Eight sources — partners, products, attachments, CRM leads, sale and purchase

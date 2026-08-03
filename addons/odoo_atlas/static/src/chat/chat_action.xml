@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+<t t-name="odoo_atlas.AtlasChat">
+    <div class="o_atlas_chat d-flex h-100" t-att-class="props.className">
+
+        <aside class="o_atlas_sidebar d-flex flex-column" aria-label="Conversations">
+            <div class="o_atlas_sidebar_head">
+                <button class="btn btn-primary w-100" t-on-click="() => this.startNewConversation()">
+                    New conversation
+                </button>
+                <input
+                    type="search"
+                    class="form-control mt-2"
+                    placeholder="Search conversations"
+                    aria-label="Search conversations"
+                    t-model="state.search"
+                />
+            </div>
+            <ul class="o_atlas_conversations list-unstyled flex-grow-1 mb-0">
+                <li t-foreach="filteredConversations" t-as="conversation" t-key="conversation.id">
+                    <button
+                        class="o_atlas_conversation btn w-100 text-start"
+                        t-att-class="{ 'o_atlas_current': conversation.id === state.conversationId }"
+                        t-att-aria-current="conversation.id === state.conversationId ? 'true' : undefined"
+                        t-on-click="() => this.openConversation(conversation.id)"
+                    >
+                        <span class="o_atlas_conversation_name d-block text-truncate"
+                              t-esc="conversation.name"/>
+                        <small class="text-muted" t-esc="conversation.message_count + ' messages'"/>
+                    </button>
+                </li>
+                <li t-if="!filteredConversations.length and !state.loading" class="p-3 text-muted">
+                    <t t-if="state.search">No conversation matches that.</t>
+                    <t t-else="">Nothing here yet.</t>
+                </li>
+            </ul>
+        </aside>
+
+        <main class="o_atlas_main d-flex flex-column flex-grow-1">
+            <div class="o_atlas_thread flex-grow-1" t-ref="thread" role="log" aria-live="polite">
+
+                <div t-if="!state.messages.length and !state.pending" class="o_atlas_welcome">
+                    <h2>Ask about your Odoo data</h2>
+                    <p class="text-muted">
+                        Answers use only what you already have access to, and cite the records
+                        they came from.
+                    </p>
+                    <div class="o_atlas_suggestions">
+                        <button
+                            t-foreach="state.suggestions"
+                            t-as="suggestion"
+                            t-key="suggestion"
+                            class="o_atlas_suggestion btn btn-outline-secondary text-start"
+                            t-on-click="() => this.useSuggestion(suggestion)"
+                        >
+                            <t t-esc="suggestion"/>
+                        </button>
+                    </div>
+                </div>
+
+                <div t-foreach="state.messages" t-as="message" t-key="message.id"
+                     class="o_atlas_message" t-att-class="'o_atlas_' + message.role">
+                    <div class="o_atlas_bubble">
+                        <t t-if="message.role === 'user'">
+                            <p class="mb-0" t-esc="message.content"/>
+                        </t>
+                        <t t-else="">
+                            <div class="o_atlas_answer" t-out="formatAnswer(message)"/>
+                            <div t-if="message.citations.length" class="o_atlas_citations">
+                                <button
+                                    t-foreach="message.citations"
+                                    t-as="citation"
+                                    t-key="citation.sequence"
+                                    class="o_atlas_chip btn btn-sm"
+                                    t-att-title="citation.snippet"
+                                    t-on-click="() => this.openCitation(citation)"
+                                >
+                                    <span class="o_atlas_chip_index" t-esc="citation.sequence"/>
+                                    <span class="text-truncate" t-esc="citation.record_name"/>
+                                </button>
+                            </div>
+                        </t>
+                    </div>
+                </div>
+
+                <div t-if="state.pending" class="o_atlas_message o_atlas_assistant">
+                    <div class="o_atlas_bubble">
+                        <div t-if="state.pending.content" class="o_atlas_answer"
+                             t-out="formatAnswer(state.pending)"/>
+                        <div t-else="" class="o_atlas_thinking" aria-label="Working on it">
+                            <span/><span/><span/>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div t-if="state.error" class="o_atlas_error alert alert-warning" role="alert">
+                <span t-esc="state.error"/>
+                <button t-if="state.retryable" class="btn btn-sm btn-link"
+                        t-on-click="() => this.retry()">
+                    Try again
+                </button>
+            </div>
+
+            <form class="o_atlas_composer" t-on-submit.prevent="() => this.send()">
+                <textarea
+                    t-ref="input"
+                    class="form-control"
+                    rows="1"
+                    placeholder="Ask a question about your data"
+                    aria-label="Ask a question about your data"
+                    t-model="state.draft"
+                    t-on-keydown="onComposerKeydown"
+                />
+                <button
+                    type="submit"
+                    class="btn btn-primary o_atlas_send"
+                    t-att-disabled="!canSend"
+                    aria-label="Send"
+                >
+                    Send
+                </button>
+            </form>
+        </main>
+    </div>
+</t>
+
+</templates>

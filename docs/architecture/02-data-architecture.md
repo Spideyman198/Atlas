@@ -245,7 +245,7 @@ CREATE INDEX chunks_embedding_hnsw_idx
     ON chunks USING hnsw (embedding vector_cosine_ops)
     WITH (m = 16, ef_construction = 64);
 
--- Lexical retrieval, fused with dense results via RRF at query time (M8).
+-- Lexical retrieval, fused with the dense results via RRF at query time.
 CREATE INDEX chunks_tsv_gin_idx ON chunks USING gin (content_tsv);
 
 -- Pre-filter selectivity. Column order matters: company_id is the high-cardinality

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!--
+        The chat panel is a client action rather than a view: it is one component
+        with its own state, not a record being edited, and an act_window would
+        make it pretend otherwise.
+    -->
+    <record id="atlas_chat_action" model="ir.actions.client">
+        <field name="name">Ask Atlas</field>
+        <field name="tag">atlas.chat</field>
+    </record>
+
+</odoo>

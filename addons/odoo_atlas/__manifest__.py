@@ -33,6 +33,7 @@ rules (ADR-0006).
         "security/atlas_security.xml",
         "security/ir.model.access.csv",
         "data/atlas_cron.xml",
+        "views/atlas_chat_views.xml",
         "views/atlas_conversation_views.xml",
         "views/atlas_message_views.xml",
         "views/atlas_access_log_views.xml",
@@ -40,6 +41,18 @@ rules (ADR-0006).
         "views/res_config_settings_views.xml",
         "views/atlas_menus.xml",
     ],
+    # The chat panel only exists inside the backend, so it loads with the
+    # backend bundle rather than being fetched separately when the action opens.
+    "assets": {
+        "web.assets_backend": [
+            "odoo_atlas/static/src/chat/chat_action.scss",
+            "odoo_atlas/static/src/chat/chat_action.js",
+            "odoo_atlas/static/src/chat/chat_action.xml",
+        ],
+        "web.assets_tests": [
+            "odoo_atlas/static/tests/tours/**/*",
+        ],
+    },
     "application": True,
     "installable": True,
     "auto_install": False,

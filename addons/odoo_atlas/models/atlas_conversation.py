@@ -1,5 +1,5 @@
 from odoo import api, fields, models
-from odoo.addons.odoo_atlas.services import context_token, engine
+from odoo.addons.odoo_atlas.services import context_token, engine, suggestions
 from odoo.addons.odoo_atlas.text import summarise
 from odoo.exceptions import UserError
 
@@ -116,6 +116,51 @@ class AtlasConversation(models.Model):
             self.env(user=self.user_id),
             ttl_seconds=engine.context_token_ttl(),
         )
+
+    @api.model
+    def atlas_suggestions(self):
+        """Questions to offer somebody looking at an empty panel.
+
+        Derived from what this database has installed and what this user may
+        read, so nobody is offered a question that comes back as a refusal.
+        """
+        return suggestions.for_user(self.env)
+
+    def atlas_transcript(self):
+        """This conversation's messages and their citations, for the UI.
+
+        One call rather than three: the panel needs messages and citations
+        together, and fetching them separately means rendering a message with
+        its citations missing for however long the second request takes.
+
+        Record rules decide what comes back. A conversation that is not this
+        user's raises before any of it is read.
+        """
+        self.ensure_one()
+        self.check_access("read")
+        return [
+            {
+                "id": message.id,
+                "role": message.role,
+                "content": message.content or "",
+                "status": message.status,
+                "citations": [
+                    {
+                        "id": citation.id,
+                        "sequence": citation.sequence,
+                        "res_model": citation.res_model,
+                        "res_id": citation.res_id,
+                        "record_name": citation.record_name or citation.res_model,
+                        "snippet": citation.snippet or "",
+                    }
+                    for citation in message.citation_ids.sorted("sequence")
+                ],
+            }
+            for message in self.message_ids.sorted("id")
+            # System and tool messages are the machinery, not the conversation.
+            # Showing them would turn a transcript into a debug log.
+            if message.role in ("user", "assistant")
+        ]
 
     def action_set_archived(self):
         self.write({"state": "archived"})

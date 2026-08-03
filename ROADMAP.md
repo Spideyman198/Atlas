@@ -14,10 +14,10 @@ can be reviewed on its own; none depends on a later milestone to make sense.
 | M5 | Odoo addon skeleton | Done |
 | M6 | Odoo gateway and authorization | Done |
 | M7 | Ingestion pipeline | Done |
-| M8 | Retrieval engine | Planned |
-| M9 | Structured query tools | Planned |
-| M10 | Orchestration and answer synthesis | Planned |
-| M11 | Odoo chat UI | Planned |
+| M8 | Retrieval engine | Done |
+| M9 | Structured query tools | Done |
+| M10 | Orchestration and answer synthesis | Done |
+| M11 | Odoo chat UI | Done |
 | M12 | Evaluation and observability | Planned |
 | M13 | Security hardening and performance | Planned |
 | M14 | CI/CD, release engineering and documentation | Planned |
@@ -222,19 +222,32 @@ and changing one record updates exactly its chunks, transactionally.
 
 ## M8 — Retrieval engine
 
-- `Retriever` port and a LlamaIndex `QueryFusionRetriever` adapter combining dense
-  and lexical results with reciprocal rank fusion, MMR diversity and optional
-  cross-encoder reranking
-- `AtlasLlamaVectorStore` bridge so LlamaIndex retrievers query our schema
-- Authorization filter as a mandatory application stage;
-  `CandidateChunk` to `AuthorizedChunk` is the only route into a prompt
-- Token-budgeted context assembly and citations built from the assembled context
+Status: done. See [docs/retrieval.md](docs/retrieval.md).
 
-Acceptance: hybrid retrieval beats dense-only on the M12 golden set; passing a
-`CandidateChunk` to the prompt assembler is a `mypy --strict` error; `lint-imports`
-confirms `llama_index` appears in one package.
+- `Retriever` port and a LlamaIndex `QueryFusionRetriever` adapter fusing dense
+  and lexical results with reciprocal rank fusion, then a diversity pass
+- Three bridges — `AtlasLlamaVectorStore`, `AtlasLlamaEmbedding`,
+  `AtlasLlamaLLM` — so LlamaIndex queries our schema, embeds through our
+  provider, and cannot reach a vendor of its own. Both store bridges are
+  read-only: ingestion owns writes
+- `RetrievalPipeline`: retrieve, authorize, assemble, in that order. The
+  authorization stage takes no configuration that could switch it off
+- Token-budgeted assembly; citations built from what entered the prompt, one per
+  record, so a citation cannot be hallucinated
+- `Reranker` port with a no-op default. A cross-encoder is a ~2.5 GB dependency
+  whose value is unmeasured until M12 and whose latency is unbudgeted until
+  M13, so the seam ships and the model does not
+
+Acceptance: passing a `CandidateChunk` to the prompt assembler is a
+`mypy --strict` error — asserted by running the type checker over a fixture that
+tries it; `lint-imports` confirms `llama_index` appears in one package. Hybrid
+beating dense-only is demonstrated mechanically (a lexical-only hit is ranked
+first; a semantic question survives sharing no words with its answer) and
+**measured on the golden set in M12**, which owns that number.
 
 ## M9 — Structured query tools
+
+Status: done.
 
 - `find_records`, `aggregate`, `stock_levels`, `overdue_invoices`, `customer_360`
 - Structured filter objects compiled to Odoo domains, validated against per-model
@@ -244,9 +257,13 @@ confirms `llama_index` appears in one package.
   domain
 
 Acceptance: every example in the README returns a correct answer against the Odoo
-demo database.
+demo database. Verified against a database built with `sale`, `purchase`,
+`stock`, `account` and `crm` demo data, acting as a non-administrator, with each
+answer cross-checked against a direct ORM query.
 
 ## M10 — Orchestration and answer synthesis
+
+Status: done.
 
 - Intent router: structured, semantic, hybrid, refuse
 - Versioned Jinja2 prompt registry
@@ -256,9 +273,14 @@ demo database.
 - Prompt-injection resistance for ingested content
 
 Acceptance: questions with no supporting context produce a refusal rather than a
-fabrication, asserted in tests.
+fabrication, asserted in tests. The provider in those tests is scripted to
+fabricate, so the refusal can only come from the orchestrator; the model is not
+called at all when there is nothing to ground on. Also verified live against a
+running engine with a context token minted by Odoo.
 
 ## M11 — Odoo chat UI
+
+Status: done.
 
 - OWL component: message list, composer, streaming renderer
 - Conversation history sidebar with search
@@ -268,7 +290,9 @@ fabrication, asserted in tests.
 - Responsive, light and dark, keyboard accessible
 
 Acceptance: a first-time user completes a question-to-cited-answer round trip
-without instructions.
+without instructions. Asserted as a tour driving a real browser: an empty panel,
+a suggestion clicked, an answer streamed in, a citation chip clicked, and the
+cited record open. A second tour covers a follow-up in the same conversation.
 
 ## M12 — Evaluation and observability
 

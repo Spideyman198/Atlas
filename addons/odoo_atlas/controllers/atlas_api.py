@@ -29,6 +29,7 @@ import time
 import werkzeug.exceptions
 from odoo import http, release
 from odoo.addons.odoo_atlas.services import context_token, secrets, tools
+from odoo.addons.odoo_atlas.services.tools.filters import FilterError
 from odoo.exceptions import AccessError
 from odoo.http import request
 from odoo.tools import consteq
@@ -74,6 +75,25 @@ class AtlasApiController(http.Controller):
             "database": request.db,
             "tools": list(tools.names()),
         }
+
+    @http.route(
+        "/atlas/api/tool/catalog",
+        type="json2",
+        auth="public",
+        methods=["POST"],
+        csrf=False,
+        save_session=False,
+    )
+    def tool_catalog(self, **payload):
+        """The tools this database can serve the acting user, as JSON schemas.
+
+        The engine hands these to the model verbatim. Keeping the definitions
+        on this side means there is one description of each tool rather than
+        two that can drift, and that a schema can never describe a tool this
+        Odoo does not have — a database without `sale` simply offers fewer.
+        """
+        _authenticate(payload)
+        return {"tools": tools.catalog_for(request.env)}
 
     @http.route(
         "/atlas/api/authorize",
@@ -205,12 +225,25 @@ class AtlasApiController(http.Controller):
         if not isinstance(arguments, dict):
             raise werkzeug.exceptions.BadRequest("'arguments' must be an object")
 
-        handler = tools.get(name)
-        if handler is None:
+        tool = tools.get(name)
+        if tool is None:
             logger.info("atlas unknown tool", extra={"atlas_uid": acting, "tool": name})
             raise werkzeug.exceptions.NotFound(f"unknown tool {name!r}")
 
-        result = handler(request.env, arguments)
+        try:
+            result = tool.run(request.env, arguments)
+        except FilterError as exc:
+            # The model chose these arguments, and is good at correcting itself
+            # when told exactly what was wrong. A 400 with the reason is worth
+            # far more here than a generic refusal.
+            logger.info("atlas tool rejected arguments", extra={"tool": name})
+            raise werkzeug.exceptions.BadRequest(str(exc)) from exc
+        except AccessError as exc:
+            # Odoo refused a record the arguments reached. Not an error to
+            # explain away: the acting user cannot see it, and that is the
+            # answer (ADR-0006).
+            logger.info("atlas tool refused by access rules", extra={"tool": name})
+            raise werkzeug.exceptions.Forbidden("not permitted") from exc
         request.env["atlas.access.log"]._record(
             "tool",
             trace_id=trace_id,

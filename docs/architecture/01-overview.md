@@ -100,6 +100,7 @@ odoo-atlas/
 │   ├── developer-guide.md
 │   ├── api.md                    #   the Odoo callback API
 │   ├── ingestion.md              #   sources, cost, the job queue
+│   ├── retrieval.md              #   hybrid search, fusion, assembly
 │   └── deployment.md             # (M14)
 ├── scripts/                      # (M14) seed helpers; `atlas` CLI covers reindex
 ├── docker-compose.yml

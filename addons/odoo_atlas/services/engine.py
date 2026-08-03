@@ -15,10 +15,12 @@ not do. And the engine's address is deployment topology: it is fixed by the same
 thing that decides both containers exist, so an administrator editing it in a
 form would be editing the wrong file.
 
-The conversation endpoint arrives in M10. What exists now answers "is the engine
-there", which is what the settings page asks.
+Answers stream. :func:`stream_answer` yields the engine's events as they arrive
+rather than collecting them, because a grounded answer takes seconds and a user
+watching a blank panel assumes it has hung.
 """
 
+import json
 import logging
 import os
 from http import HTTPStatus
@@ -146,6 +148,72 @@ def request_sync(source_keys, kind="incremental", *, record_ids=None, deleted_id
     if not isinstance(queued, dict):
         return {}, f"{url} answered without a job list."
     return queued, ""
+
+
+def stream_answer(question, context_token_value, *, history=None, conversation_id=None):
+    """Ask the engine a question and yield its events as they arrive.
+
+    Args:
+        question: What the user typed, verbatim.
+        context_token_value: Minted by Odoo for the acting user. Travels on this
+            call and nowhere else; the browser never holds one.
+        history: Earlier turns as ``{"question", "answer"}`` dicts, oldest first.
+        conversation_id: The ``atlas.conversation`` this belongs to.
+
+    Yields:
+        ``(kind, data)`` pairs, where ``kind`` is ``delta``, ``done`` or
+        ``error``. A transport failure is yielded as an ``error`` event rather
+        than raised: the caller is already streaming to a browser by then and
+        has no status code left to fail with.
+    """
+    url = f"{base_url()}/v1/chat"
+    payload = {
+        "question": question,
+        "context_token": context_token_value,
+        "history": list(history or []),
+    }
+    if conversation_id:
+        payload["conversation_id"] = conversation_id
+
+    try:
+        response = requests.post(url, json=payload, timeout=request_timeout(), stream=True)
+        response.raise_for_status()
+        yield from _decode_events(response)
+    except requests.Timeout:
+        logger.warning("engine did not answer within %ss", request_timeout())
+        yield "error", {"message": "The assistant took too long to answer. Try again."}
+    except requests.RequestException as exc:
+        logger.warning("could not reach the engine for an answer: %s", exc)
+        yield "error", {"message": "The assistant is unavailable right now."}
+
+
+def _decode_events(response):
+    """Turn a server-sent event stream into ``(kind, data)`` pairs.
+
+    A minimal reader on purpose. The engine emits one ``event:`` and one
+    ``data:`` line per block, and pulling in a dependency to parse two line
+    prefixes would be a poor trade for an addon that has to install cleanly next
+    to whatever else is in the deployment.
+    """
+    kind = None
+    for raw in response.iter_lines(decode_unicode=True):
+        if raw is None:
+            continue
+        line = raw.strip()
+        if not line:
+            kind = None
+            continue
+        if line.startswith(":"):
+            # A comment. The engine sends one to open the stream.
+            continue
+        if line.startswith("event:"):
+            kind = line[len("event:") :].strip()
+            continue
+        if line.startswith("data:") and kind:
+            try:
+                yield kind, json.loads(line[len("data:") :].strip())
+            except ValueError:
+                logger.warning("engine sent an event that was not JSON: %r", line[:120])
 
 
 def _positive_int(raw, default):

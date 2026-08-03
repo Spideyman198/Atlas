@@ -32,9 +32,15 @@ else
 
 	# Demo data gives us realistic partners, products, orders and invoices to
 	# develop retrieval against. Opt out with ODOO_LOAD_DEMO_DATA=false.
+	#
+	# Odoo 19 does not install demo data unless asked: `--without-demo` is the
+	# default and `--with-demo` is the opt-in. So the flag goes on the *true*
+	# branch. Earlier releases had it the other way round, which is how this
+	# came to be inverted — the database came up empty while the log said it
+	# had been seeded.
 	demo_args=()
-	if [ "${ODOO_LOAD_DEMO_DATA:-true}" != "true" ]; then
-		demo_args+=(--without-demo=all)
+	if [ "${ODOO_LOAD_DEMO_DATA:-true}" = "true" ]; then
+		demo_args+=(--with-demo)
 	fi
 
 	# Connection arguments must be passed explicitly. The official entrypoint

@@ -156,6 +156,27 @@ the only thing that fails.
 the other — and the index being wider than any answer is exactly why the
 query-time check cannot be skipped.
 
+## Retrieval
+
+Documented in full in [retrieval.md](retrieval.md). Three things before reading
+the code.
+
+**The pipeline's order is the security model.** `RetrievalPipeline.run` is
+retrieve, authorize, assemble. The middle stage takes no configuration that
+could switch it off, and `test_authorization_is_structural.py` runs `mypy` over
+a fixture that tries to skip it — so the guarantee is falsifiable, and stays so
+if somebody later widens the assembler's signature to be helpful.
+
+**Retrieval returns `CandidateChunk` on purpose.** The port's return type is
+what makes authorization impossible to forget rather than merely easy to
+remember. Nothing in `infrastructure/llamaindex` knows who is asking.
+
+**`AtlasLlamaLLM` is not decoration.** Constructing LlamaIndex's fusion
+retriever without an explicit LLM makes it resolve `Settings.llm` and reach for
+its OpenAI integration — a second path to a vendor with its own retry policy
+and cost meter, which is the failure ADR-0003 inverts the dependency to prevent.
+Retrieval asks no model anything, so the bridge it gets refuses every call.
+
 ## Configuration
 
 Settings come from `ATLAS_*` environment variables and are validated once at
@@ -262,6 +283,16 @@ when a test fails, so it gates CI like any other job.
 
 Coverage is not measured here. Odoo's runner has no coverage integration worth
 the wiring, and the number would not be comparable to the engine's.
+
+The chat panel is tested through a real browser. The Odoo image installs Google
+Chrome and `websocket-client` for it — Ubuntu's `chromium` package is a stub
+that installs a snap and produces a binary that cannot start in a container.
+
+Both are load-bearing in a way worth knowing about: **Odoo skips a browser test
+when either is missing instead of failing it**. A suite full of tours reports
+green having run none of them, which is exactly what happened the first time
+these were written. `TestTheBrowserTestsCanRun` asserts both are present, so
+that situation is a red build rather than a quiet one.
 
 ## Adding a port and an adapter
 

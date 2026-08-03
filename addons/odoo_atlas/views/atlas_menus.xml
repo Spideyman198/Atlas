@@ -6,6 +6,14 @@
               sequence="95"
               groups="odoo_atlas.group_atlas_user"/>
 
+    <!-- First, and the one an ordinary user is looking for. The conversation
+         list below it is for going back to something, not for asking. -->
+    <menuitem id="menu_atlas_chat"
+              name="Ask Atlas"
+              parent="menu_atlas_root"
+              action="atlas_chat_action"
+              sequence="5"/>
+
     <menuitem id="menu_atlas_conversations"
               name="Conversations"
               parent="menu_atlas_root"

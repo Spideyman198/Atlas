@@ -159,6 +159,10 @@ docs/                 ADRs and architecture documentation
 | [Request lifecycle](docs/architecture/03-request-lifecycle.md) | Query, ingestion and failure paths |
 | [Callback API](docs/api.md) | How the engine asks Odoo what a user may see |
 | [Ingestion](docs/ingestion.md) | How ERP records become searchable text, and what it costs |
+| [Retrieval](docs/retrieval.md) | Hybrid search, fusion, diversity, and how context is assembled |
+| [Tools](docs/tools.md) | How live ERP questions are answered without text-to-SQL |
+| [Orchestration](docs/orchestration.md) | Routing, prompts, citations, refusal, streaming |
+| [Chat panel](docs/chat-ui.md) | The Odoo-side UI, and why the browser never holds a token |
 | [Decision records](docs/adr/README.md) | Eight decisions with the alternatives that were rejected |
 | [Developer guide](docs/developer-guide.md) | Layers, configuration, errors, testing |
 | [Installation](docs/installation.md) | Setup and troubleshooting |
