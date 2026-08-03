@@ -11,7 +11,8 @@ orchestrator, because the model is trying to do the wrong thing every time.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 import pytest
 
@@ -46,9 +47,9 @@ class StubRetriever:
         self._chunks = tuple(chunks)
         self.requests: list[RetrievalRequest] = []
 
-    async def retrieve(self, request: RetrievalRequest) -> tuple[CandidateChunk, ...]:
+    async def retrieve(self, request: RetrievalRequest) -> list[CandidateChunk]:
         self.requests.append(request)
-        return self._chunks
+        return list(self._chunks)
 
 
 def chunk(
@@ -70,7 +71,7 @@ def service(
     chat: FakeChatProvider | None = None,
     chunks: Sequence[CandidateChunk] = (),
     readable: dict[str, dict[str, list[int]]] | None = None,
-    tools: dict[str, object] | None = None,
+    tools: Mapping[str, Callable[[Mapping[str, Any]], dict[str, Any]]] | None = None,
     gateway: FakeOdooGateway | None = None,
 ) -> AnswerService:
     """An orchestrator wired to fakes, defaulting to "everything is visible"."""
@@ -78,7 +79,9 @@ def service(
     odoo = gateway or FakeOdooGateway(
         readable=readable
         if readable is not None
-        else {"alice-token": {"sale.order": [c.res_id for c in chunks]}},
+        # `res_id` is optional on a chunk in general; the factory above always
+        # sets one, and a chunk without a record has nothing to authorize.
+        else {"alice-token": {"sale.order": [c.res_id for c in chunks if c.res_id]}},
         tools=tools or {},
     )
     prompts = JinjaPromptLibrary()
@@ -279,9 +282,9 @@ class TestCitations:
 
 class TestTools:
     async def test_a_tool_call_is_executed_and_fed_back(self) -> None:
-        calls: list[dict[str, object]] = []
+        calls: list[dict[str, Any]] = []
 
-        def handler(arguments: dict[str, object]) -> dict[str, object]:
+        def handler(arguments: Mapping[str, Any]) -> dict[str, Any]:
             calls.append(dict(arguments))
             return {"rows": [{"name": "S00001", "state": "sale"}], "matched": 1}
 

@@ -8,6 +8,7 @@ to forge, which is what most of this file is about.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -33,7 +34,7 @@ class TestTheShippedTemplates:
         assert isinstance(library, PromptLibrary)
 
     def test_every_declared_template_renders(self, library: JinjaPromptLibrary) -> None:
-        variables = {
+        variables: dict[str, dict[str, Any]] = {
             "system": {},
             "answer": {"question": "how many orders?", "context": "", "summary": ""},
             "summarise": {"turns": [{"question": "q", "answer": "a"}]},
