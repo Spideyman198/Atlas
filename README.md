@@ -172,6 +172,8 @@ docs/                 ADRs and architecture documentation
 | [Developer guide](docs/developer-guide.md) | Layers, configuration, errors, testing |
 | [Installation](docs/installation.md) | Laptop setup and troubleshooting |
 | [Deployment](docs/deployment.md) | Installing next to a real Odoo |
+| [Upgrading](docs/upgrading.md) | What a version change promises, and what it does not |
+| [Security policy](SECURITY.md) | Reporting a vulnerability, supported versions |
 | [Contributing](CONTRIBUTING.md) | Workflow, standards, commit conventions |
 | [Roadmap](ROADMAP.md) | Planned work |
 | [Changelog](CHANGELOG.md) | Released changes |

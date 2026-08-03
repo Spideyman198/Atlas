@@ -3,10 +3,38 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning
 follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Before 1.0.0 the public surface — REST contracts, Odoo model fields, configuration
-keys — may change between milestones. Breaking changes are called out explicitly.
+From 1.0.0 the public surface — the HTTP APIs, `ATLAS_*` configuration keys, Odoo
+model fields and security groups — is covered by semantic versioning. What that
+covers, what it deliberately does not, and the deprecation policy are in
+[docs/upgrading.md](docs/upgrading.md).
 
 ## [Unreleased]
+
+Nothing yet.
+
+## [1.0.0] - 2026-08-04
+
+First stable release. Atlas answers questions about an Odoo Community database
+in natural language, under the asking user's own access rights.
+
+The property the design exists to hold: retrieval searches an index that is
+deliberately broader than any one user's view, and nothing reaches a prompt
+until Odoo has confirmed, in that request and as that user, that they may read
+it. That is not a filter a future change can forget — `PromptContext` is
+constructible only from `AuthorizedChunk`, and a test runs `mypy --strict` over
+a fixture that tries to bypass it.
+
+Read-only. There is no tool that changes anything, a test scans the addon for
+`create`, `write`, `unlink`, `copy`, `sudo` and `execute`, and a request to
+change data is refused before anything is fetched.
+
+Verified for this release: 702 engine tests, 174 addon tests including two
+browser tours, 91% coverage, four architectural import contracts, a retrieval
+regression gate, and a clean supply-chain audit. Not verified: production recall
+against a real corpus and an end-to-end run against a live model provider — both
+need credentials and data this repository does not carry. See
+[docs/performance.md](docs/performance.md) for what the measurements do and do
+not establish.
 
 ### Added
 
@@ -505,4 +533,5 @@ Planning and architecture (M0):
   Authorization stays in the application layer.
   See [ADR-0003](docs/adr/0003-rag-framework-selection.md).
 
-[Unreleased]: https://github.com/Spideyman198/Atlas/commits/main
+[Unreleased]: https://github.com/Spideyman198/Atlas/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Spideyman198/Atlas/releases/tag/v1.0.0

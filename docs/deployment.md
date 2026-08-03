@@ -230,8 +230,8 @@ from the image.
 
 ## Upgrading
 
-1. Read the [changelog](../CHANGELOG.md). Before 1.0 the REST contracts, model
-   fields and configuration keys may change between milestones.
+1. Read the [changelog](../CHANGELOG.md), and
+   [upgrading.md](upgrading.md) for what a version change promises.
 2. Apply migrations: `alembic upgrade head`.
 3. Update the addon: `odoo -d production -u odoo_atlas --stop-after-init`, then
    restart Odoo.

@@ -21,7 +21,7 @@ can be reviewed on its own; none depends on a later milestone to make sense.
 | M12 | Evaluation and observability | Done |
 | M13 | Security hardening and performance | Done |
 | M14 | CI/CD, release engineering and documentation | Done |
-| M15 | 1.0.0 | Planned |
+| M15 | 1.0.0 | Done |
 
 ## M0 — Project planning and architecture
 
@@ -348,8 +348,18 @@ a diff.
 
 ## M15 — 1.0.0
 
-Version freeze, changelog finalisation, tagged release, published images, upgrade
-notes and support policy.
+Status: done, apart from the tag and the publish, which are a maintainer action.
+
+- Version frozen at 1.0.0 across the engine package and the Odoo manifest, with
+  CI failing when the two disagree
+- Changelog finalised: `[Unreleased]` became `[1.0.0]`, with a summary of what
+  the release is and what has not been verified
+- [Upgrade notes](docs/upgrading.md): the compatibility promise, what it
+  excludes and why, and the deprecation policy
+- [Support policy](SECURITY.md): private reporting, response targets, one
+  supported line at a time, and an in-scope/out-of-scope list with reasons
+- The tagged release and published images follow from
+  `.github/workflows/release.yml` once a maintainer tags `v1.0.0`
 
 ## Out of scope for 1.0
 

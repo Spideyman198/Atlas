@@ -32,7 +32,7 @@ are — the context token is minted and signed by Odoo.
 Liveness. Touches nothing external.
 
 ```json
-{"status": "ok", "service": "atlas-api", "version": "0.1.0"}
+{"status": "ok", "service": "atlas-api", "version": "1.0.0"}
 ```
 
 Always `200` while the process is alive. Wiring this to the database would turn
@@ -273,5 +273,8 @@ Called over Odoo's ORM RPC by the panel, not over HTTP directly.
 
 ## Stability
 
-Before 1.0 these contracts may change between milestones. Breaking changes are
-called out in the [changelog](../CHANGELOG.md).
+From 1.0.0 these contracts are covered by semantic versioning: request and
+response shapes, status codes and event names change only in a major release.
+[docs/upgrading.md](upgrading.md) says what else is covered and what is
+deliberately not — prompt wording and retrieval ranking are not, because a
+better answer to the same question is not a breaking change.
