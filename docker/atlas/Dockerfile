@@ -78,6 +78,17 @@ RUN groupadd --system --gid 1001 atlas \
 
 COPY --from=builder --chown=atlas:atlas /opt/venv /opt/venv
 
+# Remove pip from the runtime. Nothing installs anything here — the virtualenv
+# arrives complete from the builder — and pip vendors its own copies of
+# `msgpack` and `setuptools`, which is where two HIGH findings came from in an
+# image whose own dependencies were clean. Trivy attributes them to the image
+# because they are on disk, and it is right to: vendored code is still code that
+# ships.
+#
+# The secondary benefit is the one that matters longer: a runtime container with
+# no package installer is one an attacker cannot `pip install` into.
+RUN /opt/venv/bin/pip uninstall --yes pip  && rm -rf /usr/local/lib/python3.12/site-packages/pip            /usr/local/lib/python3.12/site-packages/pip-*.dist-info            /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.12
+
 # Migrations ship with the image so a deployment can apply its own schema:
 #   docker compose exec atlas-api alembic upgrade head
 # Without these the image can run but never migrate, which is only discovered on

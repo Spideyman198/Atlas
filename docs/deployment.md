@@ -217,6 +217,17 @@ provider's per-token rate.
 The vector database holds ERP content stripped of Odoo's record rules. Protect
 it exactly like Odoo's own ([security.md](security.md)).
 
+### The runtime image has no pip
+
+Deliberate. The virtualenv arrives complete from the build stage, so nothing
+installs anything at run time, and pip's vendored copies of `msgpack` and
+`setuptools` were the only HIGH findings in an otherwise clean image. A
+container without a package installer is also one an attacker cannot
+`pip install` into.
+
+`alembic` is installed in the virtualenv and unaffected — migrations still run
+from the image.
+
 ## Upgrading
 
 1. Read the [changelog](../CHANGELOG.md). Before 1.0 the REST contracts, model

@@ -197,6 +197,13 @@ Retrieval engine (M8):
 - `pip` in the engine image was old enough to be a vulnerability finding in its
   own right, which meant `pip-audit` reported the toolchain rather than the
   project.
+- Two HIGH vulnerabilities in the runtime image — `msgpack` and `setuptools` —
+  came from pip's *vendored* copies rather than from any declared dependency,
+  which is why `pip-audit` saw nothing and Trivy did. pip is now removed from
+  the runtime image entirely: nothing installs anything there, the virtualenv
+  arrives complete from the builder, and a runtime container without a package
+  installer is one an attacker cannot `pip install` into. `alembic` is
+  unaffected and migrations still run from the image.
 - Filtered dense search was 32x slower than necessary and returned incomplete
   results. With a company filter matching a third of the table the planner takes
   a bitmap scan over `(company_id, visibility)` and sorts sixteen thousand rows
