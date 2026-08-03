@@ -54,6 +54,52 @@ jobs:
       - name: Retrieval evaluation (regression gate)
         run: python -m atlas.interfaces.evaluate
 
+  security:
+    name: Security and licences
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks needs history to scan commits, not just the tip.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: services/atlas/pyproject.toml
+
+      # Upgraded first: an old pip is itself a finding, and auditing the
+      # environment would report the tool rather than the project.
+      - name: Install the engine and its toolchain
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "services/atlas[dev]"
+
+      # Static analysis is already covered: ruff runs flake8-bandit's rules
+      # (the `S` prefix) over the whole repository in the quality job. Running
+      # bandit as well was tried and produced one MEDIUM finding — a `requests`
+      # call whose timeout is a function call rather than a literal, which
+      # bandit cannot see through and ruff's S113 handles correctly — plus a
+      # page of duplicates of ruff's S105/S106. A second tool checking the same
+      # rules means a second suppression list to keep in step.
+      - name: Dependency vulnerabilities (pip-audit)
+        run: python scripts/audit_dependencies.py
+
+      - name: Licence compatibility
+        run: python scripts/check_licences.py
+
+      # The engine package and the Odoo manifest carry the same version in two
+      # formats. They had already drifted with nothing comparing them.
+      - name: Version consistency
+        run: python scripts/check_versions.py
+
+      # Scans history, not just the working tree: a secret committed and then
+      # removed is still in the objects and still leaked.
+      - name: Secret scanning (gitleaks)
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest             detect --source /repo --no-banner --redact --exit-code 1
+
   test:
     name: Unit and contract tests
     runs-on: ubuntu-latest
@@ -182,6 +228,18 @@ jobs:
           tags: odoo-atlas/atlas:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # Scans the built image rather than the source: this catches CVEs in the
+      # base image and the OS packages, which pip-audit cannot see.
+      - name: Image vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: odoo-atlas/atlas:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          vuln-type: os,library
 
       - name: Verify the image starts and answers liveness
         # No `--rm`: on failure the container must survive long enough for the

@@ -1,0 +1,69 @@
+name: Scheduled security audit
+
+# The CI security job runs on every pull request, which catches a vulnerability
+# introduced by a change. It does not catch one disclosed against a dependency
+# that has not changed — and that is the common case. This runs the same audit
+# weekly against `main`, so a new CVE surfaces without waiting for somebody to
+# open a pull request.
+#
+# Deliberately separate from `ci.yml`: a scheduled run that failed inside the
+# main pipeline would look like the last commit broke something.
+on:
+  schedule:
+    # Monday morning UTC. Early enough in the week that somebody is around to
+    # act on it.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  audit:
+    name: Dependency and image audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install the engine and its toolchain
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "services/atlas[dev]"
+
+      - name: Dependency vulnerabilities (pip-audit)
+        run: python scripts/audit_dependencies.py
+
+      - name: Licence compatibility
+        run: python scripts/check_licences.py
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the engine image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/atlas/Dockerfile
+          target: runtime
+          push: false
+          load: true
+          tags: odoo-atlas/atlas:audit
+
+      # `ignore-unfixed` is on: a CVE with no available patch is not something a
+      # weekly build can act on, and failing on it would train people to ignore
+      # this job.
+      - name: Image vulnerabilities (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: odoo-atlas/atlas:audit
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          vuln-type: os,library

@@ -15,9 +15,12 @@ never imports `odoo` (ADR-0002). What lives here is the authorization boundary:
 every read the engine causes runs as the user who asked, under Odoo's own record
 rules (ADR-0006).
 """,
-    # Odoo series, then the project's own version. The project reaches 1.0.0 at
-    # M15, at which point this becomes 19.0.1.0.0.
-    "version": "19.0.0.2.0",
+    # Odoo series, then the project's own version — Odoo requires the series
+    # prefix. Written by the release automation from the engine package's
+    # version, and `scripts/check_versions.py` fails the build if the two
+    # disagree. The project reaches 1.0.0 at M15, at which point this becomes
+    # 19.0.1.0.0.
+    "version": "19.0.0.1.0",
     "category": "Productivity",
     "author": "Odoo Atlas contributors",
     "website": "https://github.com/Spideyman198/Atlas",

@@ -70,6 +70,7 @@ function Show-Help {
         @('test-odoo',   'Install the addon on a throwaway database and run its tests'),
         @('eval',        'Score retrieval against the golden set and gate on it'),
         @('bench',       'Sweep HNSW parameters and report recall and latency'),
+        @('audit',       'Check dependencies for vulnerabilities and licence conflicts'),
         @('migrate',     'Apply Alembic migrations to the Atlas database'),
         @('check',       'Run everything CI runs'),
         @('clean',       'Stop the stack and DELETE all data')
@@ -196,6 +197,12 @@ switch ($Target) {
             '-e', "ATLAS_BENCH_BRANCH=$branch",
             '-e', "ATLAS_BENCH_DIRTY=$dirty",
             'atlas-tools', 'python', '-m', 'benchmarks.run_all'))
+    }
+
+    'audit' {
+        Invoke-Checked ($Tools + @('python', 'scripts/audit_dependencies.py'))
+        Invoke-Checked ($Tools + @('python', 'scripts/check_licences.py'))
+        Invoke-Checked ($Tools + @('python', 'scripts/check_versions.py'))
     }
 
     'check' {

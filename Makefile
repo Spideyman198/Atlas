@@ -179,6 +179,13 @@ bench-explain: ## Print EXPLAIN (ANALYZE, BUFFERS) for the retrieval queries
 	$(COMPOSE) exec -T postgres psql -U $${POSTGRES_USER:-odoo} -d $(BENCH_DB) \
 	  -v ON_ERROR_STOP=1 < benchmarks/explain.sql
 
+# The same checks CI runs, so a finding is visible before a pull request.
+.PHONY: audit
+audit: ## Check dependencies for known vulnerabilities and licence conflicts
+	$(TOOLS) python scripts/audit_dependencies.py
+	$(TOOLS) python scripts/check_licences.py
+	$(TOOLS) python scripts/check_versions.py
+
 .PHONY: migrate
 migrate: ## Apply Alembic migrations to the Atlas database
 	$(COMPOSE) exec atlas-api alembic upgrade head

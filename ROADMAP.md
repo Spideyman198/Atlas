@@ -20,7 +20,7 @@ can be reviewed on its own; none depends on a later milestone to make sense.
 | M11 | Odoo chat UI | Done |
 | M12 | Evaluation and observability | Done |
 | M13 | Security hardening and performance | Done |
-| M14 | CI/CD, release engineering and documentation | Planned |
+| M14 | CI/CD, release engineering and documentation | Done |
 | M15 | 1.0.0 | Planned |
 
 ## M0 — Project planning and architecture
@@ -328,14 +328,23 @@ and now takes 3.94 ms and returns complete results.
 
 ## M14 — CI/CD, release engineering and documentation
 
+Status: done, except the demo recording and screenshots — see below.
+
 - Full pipeline: ruff, mypy, unit, integration and Odoo tests, coverage gate
 - Security: bandit, pip-audit, Trivy, gitleaks, licence compliance
 - Multi-arch image build and publish; semantic-release
 - Diagram exports, screenshots, demo recording
 - `docs/deployment.md`, `docs/developer-guide.md`, complete API reference
 
-Acceptance: a green pipeline on every pull request, and a reviewer can install from
-the documentation alone.
+Acceptance: a green pipeline on every pull request, and a reviewer can install
+from the documentation alone. `docs/deployment.md` was written and then checked
+command by command against the running stack; the worker invocation in the first
+draft was wrong and was corrected that way.
+
+Not done: screenshots and a demo recording. Both need an authenticated browser
+session driven by hand. The diagrams render inline on GitHub as Mermaid and
+ASCII rather than being exported as image files, which keeps them reviewable in
+a diff.
 
 ## M15 — 1.0.0
 

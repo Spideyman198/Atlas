@@ -133,6 +133,10 @@ ignore = [
 # with `psycopg.sql.Identifier`, which is the safe spelling, but S608 matches on
 # the f-string shape rather than on what it contains.
 "benchmarks/**" = ["T201", "S608"]
+# The maintenance scripts are command-line tools. They print findings for a
+# person to read, and a check that reported through the logger would be silent
+# in the place it matters — a CI log.
+"scripts/**" = ["T201"]
 # An Odoo manifest is a bare dict literal at module level.
 "addons/**/__manifest__.py" = ["B018"]
 
@@ -187,6 +191,28 @@ ignore_missing_imports = true
 # `try/except ImportError` and degrades to tracing staying off.
 module = ["opentelemetry.exporter.*"]
 ignore_missing_imports = true
+
+[tool.semantic_release]
+# Determines the *version* from Conventional Commit prefixes, and nothing else.
+# The release workflow passes `--no-changelog`: `CHANGELOG.md` is prose, and a
+# generated list of commit subjects would replace an explanation with an
+# inventory.
+version_toml = ["services/atlas/pyproject.toml:project.version"]
+tag_format = "v{version}"
+major_on_zero = false          # 0.x: a breaking change bumps the minor, not to 1.0
+allow_zero_version = true
+commit_parser = "conventional"
+build_command = ""             # images are built by the workflow, not by this
+
+[tool.semantic_release.branches.main]
+match = "main"
+
+[tool.semantic_release.commit_parser_options]
+# `perf` earns a release: this project treats a measured latency change as a
+# user-visible one (docs/performance.md).
+allowed_tags = ["feat", "fix", "perf", "refactor", "docs", "build", "ci", "test", "chore"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
 
 [tool.pydantic-mypy]
 init_forbid_extra = true

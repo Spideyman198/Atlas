@@ -18,6 +18,12 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:${PATH}"
 
+# The venv is created with whatever pip the base image shipped, and an old pip
+# is itself a vulnerability finding — `pip-audit` reports the toolchain
+# alongside the dependencies. Upgrading here means the audit reports the
+# project.
+RUN pip install --no-cache-dir --upgrade pip setuptools
+
 WORKDIR /build
 
 # Dependency metadata is copied before the source so that editing a module does
@@ -34,6 +40,13 @@ RUN pip install --no-cache-dir .
 # `make lint` and `make type` so contributors need no local Python at all —
 # which matters, because the engine pins 3.12 while developer machines vary.
 FROM builder AS dev
+
+# git, for the tools that read the repository rather than the source: the
+# benchmark harness records the commit a measurement came from, and
+# semantic-release derives the next version from the commit history. Without it
+# the benchmark recorded an empty commit — a results file that cannot be traced
+# to code is not a measurement.
+RUN apt-get update  && apt-get install -y --no-install-recommends git  && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir ".[dev]"
 

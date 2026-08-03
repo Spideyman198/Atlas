@@ -157,6 +157,7 @@ docs/                 ADRs and architecture documentation
 | [Architecture overview](docs/architecture/01-overview.md) | Components, layering, repository layout, known limits |
 | [Data architecture](docs/architecture/02-data-architecture.md) | Schema, indexes, performance, migration policy |
 | [Request lifecycle](docs/architecture/03-request-lifecycle.md) | Query, ingestion and failure paths |
+| [API reference](docs/api-reference.md) | Every endpoint, on both sides of the boundary |
 | [Callback API](docs/api.md) | How the engine asks Odoo what a user may see |
 | [Ingestion](docs/ingestion.md) | How ERP records become searchable text, and what it costs |
 | [Retrieval](docs/retrieval.md) | Hybrid search, fusion, diversity, and how context is assembled |
@@ -169,7 +170,8 @@ docs/                 ADRs and architecture documentation
 | [Security](docs/security.md) | Threat model, what is defended and what is not |
 | [Decision records](docs/adr/README.md) | Eight decisions with the alternatives that were rejected |
 | [Developer guide](docs/developer-guide.md) | Layers, configuration, errors, testing |
-| [Installation](docs/installation.md) | Setup and troubleshooting |
+| [Installation](docs/installation.md) | Laptop setup and troubleshooting |
+| [Deployment](docs/deployment.md) | Installing next to a real Odoo |
 | [Contributing](CONTRIBUTING.md) | Workflow, standards, commit conventions |
 | [Roadmap](ROADMAP.md) | Planned work |
 | [Changelog](CHANGELOG.md) | Released changes |

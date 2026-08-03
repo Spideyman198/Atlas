@@ -1,0 +1,176 @@
+name: Release
+
+# Runs after CI passes on `main`. Determines the next version from the commit
+# messages, tags it, and publishes multi-architecture images.
+#
+# Two deliberate limits on what is automated:
+#
+# **The changelog is not generated.** `CHANGELOG.md` is written by hand, in
+# prose, and says why a change was made — a generated list of commit subjects
+# would replace that with something nobody reads. semantic-release determines
+# the *version* from the commits, which it is good at, and the release notes
+# point at the hand-written entry.
+#
+# **Nothing publishes to PyPI.** The engine is deployed as a container, not
+# installed as a library, and a package on PyPI would be an interface promise
+# the project is not ready to make before 1.0.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  REGISTRY: ghcr.io
+
+jobs:
+  version:
+    name: Determine and tag the version
+    # Only after a green CI run. `workflow_run` fires on failure too, and
+    # releasing a commit whose tests failed is the thing this guards against.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # semantic-release reads history to find the last tag and the commits
+          # since it.
+          fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install semantic-release
+        run: pip install python-semantic-release==9.21.1
+
+      # Writes the engine package version, then the addon manifest follows from
+      # it. `check_versions.py --write` derives the Odoo form rather than
+      # teaching semantic-release an addon-specific version format.
+      - name: Determine the next version
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          semantic-release version --no-changelog --no-vcs-release --no-push --no-commit --no-tag
+          python scripts/check_versions.py --write
+          python scripts/check_versions.py
+          VERSION=$(python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('services/atlas/pyproject.toml').read_text())['project']['version'])")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          if git diff --quiet; then
+            echo "released=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "released=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit the version bump and tag it
+        if: steps.release.outputs.released == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add services/atlas/pyproject.toml addons/odoo_atlas/__manifest__.py
+          git commit -m "chore(release): ${{ steps.release.outputs.version }} [skip ci]"
+          git tag -a "${{ steps.release.outputs.tag }}" \
+            -m "${{ steps.release.outputs.tag }}"
+          git push origin HEAD:main --follow-tags
+
+  images:
+    name: Publish images
+    needs: version
+    if: needs.version.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - name: atlas
+            dockerfile: docker/atlas/Dockerfile
+            target: runtime
+          - name: odoo
+            dockerfile: docker/odoo/Dockerfile
+            target: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+
+      # QEMU for the arm64 half of the manifest. Odoo deployments run on both,
+      # and an amd64-only image forces emulation on anyone using Apple silicon
+      # or Graviton.
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.name }}:${{ needs.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.name }}:latest
+          # Provenance and an SBOM, so a deployment can be traced to the commit
+          # and scanned without rebuilding it.
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  release:
+    name: Publish the GitHub release
+    needs: [version, images]
+    if: needs.version.outputs.released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.tag }}
+
+      # Notes come from the hand-written changelog, not from commit subjects.
+      # `[Unreleased]` is where entries accumulate; this lifts that section.
+      - name: Extract the changelog entry
+        run: |
+          python - <<'PY' > release-notes.md
+          import pathlib, re
+          text = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          match = re.search(r"^## \[Unreleased\]\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+          print((match.group(1).strip() if match else "See CHANGELOG.md."))
+          PY
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ needs.version.outputs.tag }}" \
+            --title "${{ needs.version.outputs.tag }}" \
+            --notes-file release-notes.md

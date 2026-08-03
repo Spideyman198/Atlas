@@ -10,6 +10,30 @@ keys — may change between milestones. Breaking changes are called out explicit
 
 ### Added
 
+CI/CD, release engineering and documentation (M14):
+
+- A security job on every pull request: `pip-audit` for dependency
+  vulnerabilities, gitleaks over the full history, a licence check against
+  LGPL-3.0 compatibility, and version consistency between the engine package and
+  the addon manifest. Trivy scans the built image for OS and library CVEs.
+- A weekly scheduled audit, because a vulnerability disclosed against a
+  dependency that has not changed will not be caught by a pull-request gate.
+- `scripts/check_licences.py`, reading `importlib.metadata` directly.
+  `pip-licenses` reported "UNKNOWN" for 63 of 157 distributions because it does
+  not consult PEP 639 `License-Expression` — a licence checker that cannot read
+  most licences is worse than none, because it looks like it is working.
+- `scripts/audit_dependencies.py`, which keeps `--strict`'s guarantee without
+  its false failure on Atlas itself, which has no PyPI release to audit against.
+- A release workflow: semantic-release determines the version from Conventional
+  Commit prefixes, the addon manifest is derived from it, and multi-architecture
+  images (amd64 and arm64) are published to GHCR with provenance and an SBOM.
+  The changelog is deliberately not generated — this file is prose, and a list
+  of commit subjects would replace an explanation with an inventory.
+- [docs/deployment.md](docs/deployment.md): installing next to a real Odoo,
+  verified command by command against a running stack.
+- [docs/api-reference.md](docs/api-reference.md): every endpoint on both sides
+  of the boundary, with the authentication each uses.
+
 Security hardening and performance (M13):
 
 - Redaction of credentials and regulated identifiers before anything crosses
@@ -155,6 +179,16 @@ Retrieval engine (M8):
 
 ### Fixed
 
+- The engine package and the Odoo addon manifest had drifted apart — `0.1.0`
+  against `19.0.0.2.0`, which reads as `0.2.0` — with nothing comparing them.
+  They are one product shipped as two artifacts, and CI now fails when the two
+  declarations disagree.
+- The tools image had no `git`, so the benchmark harness recorded an empty
+  commit and semantic-release could not run at all. A results file that cannot
+  be traced to code is not a measurement.
+- `pip` in the engine image was old enough to be a vulnerability finding in its
+  own right, which meant `pip-audit` reported the toolchain rather than the
+  project.
 - Filtered dense search was 32x slower than necessary and returned incomplete
   results. With a company filter matching a third of the table the planner takes
   a bitmap scan over `(company_id, visibility)` and sorts sixteen thousand rows

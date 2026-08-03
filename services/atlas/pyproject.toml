@@ -73,6 +73,9 @@ dev = [
     # correctly refuses to tolerate.
     "httpx2==2.9.1",
     "types-PyYAML==6.0.12.20250915",
+    # Supply-chain check, run by `make audit` and by CI. The licence check
+    # needs no dependency: it reads importlib.metadata directly.
+    "pip-audit==2.9.0",
     "ruff==0.16.1",
     "mypy==2.3.0",
     "import-linter==2.13",
