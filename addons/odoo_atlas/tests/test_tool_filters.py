@@ -120,9 +120,9 @@ class TestFilterRejection(FilterCase):
             )
 
     def test_too_many_filters_are_refused(self):
-        entries = [
-            {"field": "city", "operator": "=", "value": "Brussels"}
-        ] * (catalog.MAX_FILTERS + 1)
+        entries = [{"field": "city", "operator": "=", "value": "Brussels"}] * (
+            catalog.MAX_FILTERS + 1
+        )
 
         with self.assertRaises(FilterError):
             filters.compile_filters(self.model, entries, self.spec)
@@ -179,27 +179,33 @@ class TestNoInputEscapesTheAllowList(FilterCase):
     """
 
     FIELDS = (
-        "city",              # allowed, text
-        "customer_rank",     # allowed, numeric
-        "id",                # allowed, integer
-        "is_company",        # allowed, boolean
-        "password",          # never allowed
-        "user_id.login",     # relation traversal
-        "",                  # empty
-        "__class__",         # a Python attribute, not a field
+        "city",  # allowed, text
+        "customer_rank",  # allowed, numeric
+        "id",  # allowed, integer
+        "is_company",  # allowed, boolean
+        "password",  # never allowed
+        "user_id.login",  # relation traversal
+        "",  # empty
+        "__class__",  # a Python attribute, not a field
         "city; DROP TABLE",  # an attempt at something else entirely
     )
     OPERATORS = ("=", "!=", ">", "in", "not in", "ilike", "=like", "child_of", "", "any")
     VALUES = (
-        "Brussels", 42, 0, True, False, None, [1, 2], [], {"a": 1},
+        "Brussels",
+        42,
+        0,
+        True,
+        False,
+        None,
+        [1, 2],
+        [],
+        {"a": 1},
         "x" * (catalog.MAX_TEXT_LENGTH + 1),
     )
 
     def test_every_compiled_clause_stays_inside_the_allow_list(self):
         compiled = 0
-        for field, operator, value in itertools.product(
-            self.FIELDS, self.OPERATORS, self.VALUES
-        ):
+        for field, operator, value in itertools.product(self.FIELDS, self.OPERATORS, self.VALUES):
             entry = {"field": field, "operator": operator, "value": value}
             try:
                 domain = filters.compile_filters(self.model, [entry], self.spec)
@@ -220,9 +226,7 @@ class TestNoInputEscapesTheAllowList(FilterCase):
     def test_everything_that_compiles_also_executes(self):
         """A domain the ORM rejects is a 500 where a rejection was wanted."""
         executed = 0
-        for field, operator, value in itertools.product(
-            self.FIELDS, self.OPERATORS, self.VALUES
-        ):
+        for field, operator, value in itertools.product(self.FIELDS, self.OPERATORS, self.VALUES):
             entry = {"field": field, "operator": operator, "value": value}
             try:
                 domain = filters.compile_filters(self.model, [entry], self.spec)

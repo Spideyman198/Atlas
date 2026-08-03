@@ -261,6 +261,28 @@ class RetrievalSettings(BaseModel):
     )
 
 
+class ObservabilitySettings(BaseModel):
+    """Where traces go, and whether metrics are exposed."""
+
+    model_config = {"frozen": True}
+
+    otlp_endpoint: str | None = Field(
+        default=None,
+        description=(
+            "OTLP collector, such as http://collector:4317. Absent means tracing "
+            "stays off: an engine that cannot start without a collector would be "
+            "a poor trade for observability."
+        ),
+    )
+    metrics_enabled: bool = Field(
+        default=True,
+        description=(
+            "Serve /metrics. On by default because the endpoint exposes counters "
+            "and histograms only — no question text, no user, no record."
+        ),
+    )
+
+
 class Settings(BaseSettings):
     """Engine configuration, sourced from ``ATLAS_*`` environment variables.
 
@@ -291,6 +313,7 @@ class Settings(BaseSettings):
     odoo: OdooSettings = OdooSettings()
     ingestion: IngestionSettings = IngestionSettings()
     retrieval: RetrievalSettings = RetrievalSettings()
+    observability: ObservabilitySettings = ObservabilitySettings()
 
     @property
     def is_production(self) -> bool:

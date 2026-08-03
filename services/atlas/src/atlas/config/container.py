@@ -25,12 +25,14 @@ from atlas.application.tools import ToolBox
 from atlas.config.providers import build_providers
 from atlas.config.settings import Settings, get_settings
 from atlas.domain.errors import ConfigurationError
+from atlas.domain.observability import Recorder
 from atlas.domain.ports.chat import ChatProvider
 from atlas.domain.ports.embedding import EmbeddingProvider
 from atlas.domain.ports.prompts import PromptLibrary
 from atlas.domain.ports.retriever import Retriever
 from atlas.domain.ports.vector_store import VectorStore
 from atlas.infrastructure.llamaindex import LlamaIndexDocumentLoader, LlamaIndexHybridRetriever
+from atlas.infrastructure.observability.recorder import PrometheusRecorder
 from atlas.infrastructure.odoo import OdooHttpGateway, OdooHttpSourceReader
 from atlas.infrastructure.persistence import (
     PgEmbeddingCache,
@@ -70,6 +72,7 @@ class Container:
         self._source_reader = source_reader
         self._loader = loader
         self._prompts = prompts
+        self._recorder = PrometheusRecorder()
 
     @property
     def settings(self) -> Settings:
@@ -167,7 +170,13 @@ class Container:
             retriever=self.retriever,
             authorization=AuthorizationFilter(self._odoo),
             assembler=ContextAssembler(),
+            recorder=self._recorder,
         )
+
+    @property
+    def recorder(self) -> Recorder:
+        """Where the application layer reports what it did."""
+        return self._recorder
 
     @property
     def prompts(self) -> PromptLibrary:
@@ -197,6 +206,7 @@ class Container:
                 prompts=self._prompts,
                 budget=self._settings.chat.history_budget,
             ),
+            recorder=self._recorder,
             budget=AnswerBudget(
                 retrieval_limit=self._settings.retrieval.limit,
                 token_budget=self._settings.retrieval.token_budget,

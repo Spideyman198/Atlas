@@ -10,6 +10,26 @@ keys — may change between milestones. Breaking changes are called out explicit
 
 ### Added
 
+Evaluation and observability (M12):
+
+- A golden question set and a fixture corpus, with `make eval` scoring
+  recall@k, MRR and nDCG@k and failing on a regression. Runs offline, so CI can
+  gate a pull request without an API key. Documented in
+  [docs/evaluation.md](docs/evaluation.md).
+- The metrics are pure functions over ranked ids, tested against hand-written
+  rankings where the right answer is arithmetic rather than opinion.
+- Answer checks: every citation marker resolves, a grounded answer cites
+  something, and figures in the text appear in the context. A proxy for
+  faithfulness, and documented as one.
+- `GET /metrics` in Prometheus format, with labels held to a fixed
+  low-cardinality set — nothing per user, per conversation or per question.
+- OpenTelemetry spans, off unless a collector is configured, carrying Atlas's
+  own trace id rather than a second identity only the tracing backend knows.
+- Per-answer cost, priced in the engine where the price table lives, stored on
+  the message and summed per conversation.
+- A `Recorder` port with a no-op default, so no use case branches on whether
+  anyone is watching, and no metrics failure can reach a caller.
+
 Chat panel (M11):
 
 - An OWL client action: message list with a streaming renderer, composer,
@@ -108,6 +128,10 @@ Retrieval engine (M8):
 
 ### Fixed
 
+- The LlamaIndex bridge dropped chunk metadata. Everything a chunk carried of
+  its own — including `record_name`, which is what a citation is labelled
+  with — was lost on the way through fusion, so citations fell back to a worse
+  label. Found by an evaluation run scoring zero across the board.
 - Browser tests were being skipped rather than run. Odoo skips a tour when it
   cannot find a browser or `websocket-client`, and a skip is not a failure — the
   first version of the chat tours reported green having exercised nothing. A

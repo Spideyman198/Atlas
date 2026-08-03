@@ -187,9 +187,7 @@ def _group_row(group_by, aggregates, row):
     flattened = {}
     for index, name in enumerate(group_by):
         value = row[index]
-        flattened[name] = (
-            value.display_name if hasattr(value, "display_name") else _jsonable(value)
-        )
+        flattened[name] = value.display_name if hasattr(value, "display_name") else _jsonable(value)
     for offset, name in enumerate(aggregates):
         flattened[name.replace(":sum", "")] = _jsonable(row[len(group_by) + offset])
     return flattened
@@ -378,8 +376,15 @@ def overdue_invoices(env, arguments):
     rows = _rows(
         move.search_read(
             domain,
-            ["name", "partner_id", "invoice_date", "invoice_date_due", "amount_total",
-             "amount_residual", "currency_id"],
+            [
+                "name",
+                "partner_id",
+                "invoice_date",
+                "invoice_date_due",
+                "amount_total",
+                "amount_residual",
+                "currency_id",
+            ],
             limit=limit,
             order="invoice_date_due asc",
         )
@@ -469,9 +474,7 @@ def customer_360(env, arguments):
         "label": "Customer summary",
         "matched": 1,
         "partner": _rows(
-            partner.read(
-                ["display_name", "email", "phone", "city", "country_id", "vat", "user_id"]
-            )
+            partner.read(["display_name", "email", "phone", "city", "country_id", "vat", "user_id"])
         )[0],
     }
     summary.update(_related_totals(env, partner))
@@ -493,8 +496,10 @@ def _related_totals(env, partner):
             "count": orders.search_count(domain),
             "recent": _rows(
                 orders.search_read(
-                    domain, ["name", "date_order", "state", "amount_total"],
-                    limit=SUMMARY_ROWS, order="date_order desc",
+                    domain,
+                    ["name", "date_order", "state", "amount_total"],
+                    limit=SUMMARY_ROWS,
+                    order="date_order desc",
                 )
             ),
         }
@@ -512,9 +517,10 @@ def _related_totals(env, partner):
             "unpaid_count": moves.search_count(unpaid),
             "recent": _rows(
                 moves.search_read(
-                    domain, ["name", "invoice_date", "payment_state", "amount_total",
-                             "amount_residual"],
-                    limit=SUMMARY_ROWS, order="invoice_date desc",
+                    domain,
+                    ["name", "invoice_date", "payment_state", "amount_total", "amount_residual"],
+                    limit=SUMMARY_ROWS,
+                    order="invoice_date desc",
                 )
             ),
         }
@@ -526,8 +532,10 @@ def _related_totals(env, partner):
             "count": leads.search_count(domain),
             "recent": _rows(
                 leads.search_read(
-                    domain, ["name", "stage_id", "expected_revenue", "date_deadline"],
-                    limit=SUMMARY_ROWS, order="create_date desc",
+                    domain,
+                    ["name", "stage_id", "expected_revenue", "date_deadline"],
+                    limit=SUMMARY_ROWS,
+                    order="create_date desc",
                 )
             ),
         }

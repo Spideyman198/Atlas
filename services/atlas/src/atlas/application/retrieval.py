@@ -17,12 +17,14 @@ assembler a candidate is a ``mypy --strict`` error
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Sequence
 from typing import Final
 
 from atlas.application.authorization import AuthorizationFilter
 from atlas.domain.authorization import UserContext
 from atlas.domain.corpus import AuthorizedChunk
+from atlas.domain.observability import NullRecorder, Recorder
 from atlas.domain.ports.retriever import Retriever
 from atlas.domain.retrieval import (
     Citation,
@@ -120,10 +122,12 @@ class RetrievalPipeline:
         retriever: Retriever,
         authorization: AuthorizationFilter,
         assembler: ContextAssembler | None = None,
+        recorder: Recorder | None = None,
     ) -> None:
         self._retriever = retriever
         self._authorization = authorization
         self._assembler = assembler or ContextAssembler()
+        self._recorder = recorder or NullRecorder()
 
     async def run(self, context: UserContext, request: RetrievalRequest) -> RetrievalResult:
         """Answer-ready context for one question, as one user.
@@ -133,6 +137,7 @@ class RetrievalPipeline:
                 asked. Both mean the same thing: no context, no answer. The
                 filter fails closed and this does not soften it.
         """
+        started = time.perf_counter()
         candidates = await self._retriever.retrieve(request)
         authorized = await self._authorization.filter(context, candidates)
 
@@ -142,6 +147,12 @@ class RetrievalPipeline:
         wanted = authorized[: request.limit]
         prompt_context = self._assembler.assemble(wanted, budget=request.token_budget)
 
+        self._recorder.retrieval_finished(
+            candidates=len(candidates),
+            authorized=len(authorized),
+            used=prompt_context.chunks_used,
+            seconds=time.perf_counter() - started,
+        )
         logger.info(
             "retrieval pipeline",
             extra={

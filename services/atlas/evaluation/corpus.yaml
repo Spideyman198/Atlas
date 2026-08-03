@@ -1,0 +1,129 @@
+# The corpus the golden questions are scored against.
+#
+# Written out rather than pulled from an Odoo, so `make eval` runs anywhere and
+# produces the same number twice. A real ERP makes a better benchmark and a
+# worse gate: the corpus moves under you, and a metric that drops because
+# somebody confirmed an order tells you nothing about retrieval.
+#
+# The records are deliberately confusable. Two customers share a first word,
+# two orders differ only in status, and the refund policy exists as both a
+# document and a sentence inside an unrelated note. Retrieval that scores well
+# on a corpus of unrelated paragraphs has not been tested.
+
+documents:
+  - key: partner-acme
+    res_model: res.partner
+    res_id: 101
+    title: Acme Corporation
+    text: |
+      Acme Corporation. Customer since 2019, based in Brussels, Belgium.
+      VAT BE0477472701. Primary contact Marie Dubois, purchasing manager.
+      Payment terms 30 days. Account manager Sophie Laurent.
+
+  - key: partner-acme-logistics
+    res_model: res.partner
+    res_id: 102
+    title: Acme Logistics
+    text: |
+      Acme Logistics. Supplier of freight and warehousing services, based in
+      Antwerp, Belgium. VAT BE0812345678. Contact Peter Janssens.
+      Unrelated to Acme Corporation despite the shared name.
+
+  - key: partner-brightwave
+    res_model: res.partner
+    res_id: 103
+    title: Brightwave Interiors
+    text: |
+      Brightwave Interiors. Customer since 2023, based in Ghent, Belgium.
+      Furniture retailer. Contact Lieve Maes. Payment terms 45 days.
+      Currently on credit hold pending a disputed invoice.
+
+  - key: order-s00041
+    res_model: sale.order
+    res_id: 41
+    title: S00041
+    text: |
+      Sales order S00041 for Acme Corporation, dated 2026-05-14.
+      Status: confirmed. Total 12,480.00 EUR. Salesperson Sophie Laurent.
+      Lines: 40 acoustic bloc screens, 12 large cabinets.
+
+  - key: order-s00042
+    res_model: sale.order
+    res_id: 42
+    title: S00042
+    text: |
+      Sales order S00042 for Acme Corporation, dated 2026-06-02.
+      Status: draft quotation, not yet confirmed. Total 3,150.00 EUR.
+      Salesperson Sophie Laurent. Lines: 10 office chairs.
+
+  - key: order-s00043
+    res_model: sale.order
+    res_id: 43
+    title: S00043
+    text: |
+      Sales order S00043 for Brightwave Interiors, dated 2026-06-18.
+      Status: confirmed. Total 8,900.00 EUR. Salesperson Tom Verhoeven.
+      Lines: 25 desk lamps, 6 conference tables.
+
+  - key: invoice-inv2026-0117
+    res_model: account.move
+    res_id: 117
+    title: INV/2026/0117
+    text: |
+      Customer invoice INV/2026/0117 for Brightwave Interiors.
+      Invoice date 2026-04-30, due 2026-06-14. Total 8,900.00 EUR,
+      amount still outstanding 8,900.00 EUR. Payment state: not paid.
+      This is the disputed invoice behind the credit hold.
+
+  - key: invoice-inv2026-0104
+    res_model: account.move
+    res_id: 104
+    title: INV/2026/0104
+    text: |
+      Customer invoice INV/2026/0104 for Acme Corporation.
+      Invoice date 2026-03-11, due 2026-04-10. Total 12,480.00 EUR.
+      Payment state: paid in full on 2026-04-08.
+
+  - key: policy-refunds
+    res_model: ir.attachment
+    res_id: 501
+    title: Refund and returns policy
+    text: |
+      Refund and returns policy, revision 4, effective January 2026.
+      Goods may be returned within 30 days of delivery for a full refund,
+      provided they are unused and in original packaging. Bespoke and
+      made-to-order items are excluded. Refunds are issued to the original
+      payment method within 14 days of the return being received.
+      Shipping costs are refunded only where the goods were faulty.
+
+  - key: policy-warranty
+    res_model: ir.attachment
+    res_id: 502
+    title: Warranty terms
+    text: |
+      Warranty terms, revision 2. All furniture carries a two-year warranty
+      against manufacturing defects from the date of delivery. The warranty
+      covers repair or replacement at our discretion and excludes damage from
+      misuse, normal wear, and any modification by the customer.
+      Warranty claims require the original order reference.
+
+  - key: note-credit-hold
+    res_model: mail.message
+    res_id: 9001
+    title: Note on the Brightwave credit hold
+    text: |
+      Internal note, 2026-06-20, Sophie Laurent. Brightwave are disputing
+      INV/2026/0117 on the grounds that six conference tables arrived damaged.
+      They have asked whether our 30-day refund window still applies given the
+      delivery was in April. Awaiting a decision before releasing the credit
+      hold. Do not ship S00043 until this is resolved.
+
+  - key: manual-assembly
+    res_model: ir.attachment
+    res_id: 503
+    title: Conference table assembly guide
+    text: |
+      Conference table assembly guide. Attach the leg frames to the underside
+      of the top using the supplied M8 bolts, tightening in a diagonal
+      sequence. Do not fully tighten any bolt until all eight are seated.
+      Fit the cable management tray last. Two people are required.

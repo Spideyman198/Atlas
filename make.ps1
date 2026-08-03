@@ -68,6 +68,7 @@ function Show-Help {
         @('test-integration', 'Run integration tests against the running PostgreSQL'),
         @('test-all',    'Run every test tier with the coverage gate'),
         @('test-odoo',   'Install the addon on a throwaway database and run its tests'),
+        @('eval',        'Score retrieval against the golden set and gate on it'),
         @('migrate',     'Apply Alembic migrations to the Atlas database'),
         @('check',       'Run everything CI runs'),
         @('clean',       'Stop the stack and DELETE all data')
@@ -164,11 +165,22 @@ switch ($Target) {
             '--stop-after-init', '--max-cron-threads=0', '--log-level=test'))
     }
 
+    # Offline: a file corpus, a deterministic embedder, an in-memory store. No
+    # services and no API key, which is the only reason CI can gate on it.
+    'eval' {
+        Invoke-Checked ($Tools + @('python', '-m', 'atlas.interfaces.evaluate'))
+    }
+
+    'eval-live' {
+        Invoke-Checked ($Compose + @('exec', 'atlas-api', 'python', '-m', 'atlas.interfaces.evaluate', '--live'))
+    }
+
     'check' {
         & $PSCommandPath 'lint'
         & $PSCommandPath 'type'
         & $PSCommandPath 'imports'
         & $PSCommandPath 'test'
+        & $PSCommandPath 'eval'
         & $PSCommandPath 'test-odoo'
     }
 

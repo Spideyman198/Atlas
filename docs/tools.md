@@ -55,7 +55,7 @@ An Odoo domain is a small programming language: nested boolean operators, dotted
 traversal across relations, and operators whose meaning depends on the model.
 
 ```python
-[('partner_id.user_id.login', 'ilike', 'admin')]
+[("partner_id.user_id.login", "ilike", "admin")]
 ```
 
 That is a valid domain. It walks two relations to a field nobody put on any

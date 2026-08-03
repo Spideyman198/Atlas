@@ -90,8 +90,7 @@ def _check_field(field, spec):
         # The whole reason this module exists. A dotted path walks relations to
         # somewhere nobody allow-listed.
         message = (
-            f"{field!r} traverses a relation; only direct fields of "
-            f"{spec.model} can be filtered on"
+            f"{field!r} traverses a relation; only direct fields of {spec.model} can be filtered on"
         )
         raise FilterError(message)
     if field not in spec.fields:
@@ -136,9 +135,7 @@ def _check_value(field, operator, value, description):
         # a 500 where a rejected tool call was wanted. A many2one counts,
         # because Odoo matches those by display name.
         if description.type not in _TEXTUAL and description.type != "many2one":
-            message = (
-                f"{field!r} is not text; operator {operator!r} does not apply to it"
-            )
+            message = f"{field!r} is not text; operator {operator!r} does not apply to it"
             raise FilterError(message)
         return _check_text(field, value)
     return _check_scalar(field, value, description)
@@ -159,13 +156,16 @@ def _check_scalar(field, value, description):
     handful of mismatches that either blow up in the database or, worse, match
     nothing quietly — which reads to a model as "there are none" and sends it
     off answering a different question.
-    """
-    kind = description.type
 
+    Two rules hold for every type and are settled here; the rest is dispatched
+    to a per-type check so that adding a type means adding a function rather
+    than another branch to a ladder nobody can hold in their head.
+    """
     if value is None:
         # Odoo's way of asking "is this unset", and valid for every type.
         return value
 
+    kind = description.type
     if isinstance(value, bool):
         if kind in _NUMERIC:
             # `True` is an int in Python and would silently mean 1.
@@ -173,42 +173,70 @@ def _check_scalar(field, value, description):
             raise FilterError(message)
         return value
 
-    if kind in _NUMERIC:
-        if isinstance(value, str):
-            message = f"{field!r} takes a number, not text"
-            raise FilterError(message)
-        if kind == "integer" and isinstance(value, float):
-            message = f"{field!r} takes a whole number"
-            raise FilterError(message)
-        return value
+    return _CHECKS.get(kind, _check_other)(field, value, kind)
 
-    if kind == "many2one":
-        if isinstance(value, float):
-            message = f"{field!r} takes a record id or a name"
-            raise FilterError(message)
-        if isinstance(value, str):
-            return _check_text(field, value)
-        return value
 
-    if kind in _TEXTUAL:
-        if isinstance(value, (int, float)):
-            message = f"{field!r} is text; {value!r} is not a value for it"
-            raise FilterError(message)
-        return _check_text(field, value)
-
-    if kind in _TEMPORAL:
-        if not isinstance(value, str):
-            message = f"{field!r} is a date; give it as text, such as '2026-08-01'"
-            raise FilterError(message)
-        return _check_text(field, value)
-
-    if kind == "boolean":
-        message = f"{field!r} is true or false; {value!r} is not a value for it"
+def _check_numeric(field, value, kind):
+    if isinstance(value, str):
+        message = f"{field!r} takes a number, not text"
         raise FilterError(message)
+    if kind == "integer" and isinstance(value, float):
+        message = f"{field!r} takes a whole number"
+        raise FilterError(message)
+    return value
 
+
+def _check_relation(field, value, _kind):
+    """A many2one takes a record id or a display name, and Odoo resolves both."""
+    if isinstance(value, float):
+        message = f"{field!r} takes a record id or a name"
+        raise FilterError(message)
     if isinstance(value, str):
         return _check_text(field, value)
     return value
+
+
+def _check_textual(field, value, _kind):
+    if isinstance(value, (int, float)):
+        message = f"{field!r} is text; {value!r} is not a value for it"
+        raise FilterError(message)
+    return _check_text(field, value)
+
+
+def _check_temporal(field, value, _kind):
+    if not isinstance(value, str):
+        message = f"{field!r} is a date; give it as text, such as '2026-08-01'"
+        raise FilterError(message)
+    return _check_text(field, value)
+
+
+def _check_boolean(field, value, _kind):
+    # `True` and `False` already returned above, so anything arriving here is
+    # the wrong type by definition.
+    message = f"{field!r} is true or false; {value!r} is not a value for it"
+    raise FilterError(message)
+
+
+def _check_other(field, value, _kind):
+    """Anything the catalogue allows that has no rule of its own.
+
+    Reached for binary, reference and the rest. Bounded rather than validated:
+    the field is on an allow-list, so the worst case is a query that matches
+    nothing.
+    """
+    if isinstance(value, str):
+        return _check_text(field, value)
+    return value
+
+
+#: Per-type checks, by Odoo field type.
+_CHECKS = {
+    **dict.fromkeys(_NUMERIC, _check_numeric),
+    **dict.fromkeys(_TEXTUAL, _check_textual),
+    **dict.fromkeys(_TEMPORAL, _check_temporal),
+    "many2one": _check_relation,
+    "boolean": _check_boolean,
+}
 
 
 def _check_list_shape(field, value):
@@ -254,9 +282,7 @@ def check_fields(requested, spec):
     unknown = [name for name in requested if name not in spec.fields]
     if unknown:
         allowed = ", ".join(sorted(spec.fields))
-        message = (
-            f"cannot read {', '.join(map(repr, unknown))} on {spec.model}. Allowed: {allowed}"
-        )
+        message = f"cannot read {', '.join(map(repr, unknown))} on {spec.model}. Allowed: {allowed}"
         raise FilterError(message)
     return ["id", *[name for name in requested if name != "id"]]
 

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from typing import Final
@@ -42,6 +43,7 @@ from atlas.domain.chat import (
     ToolDefinition,
     ToolResult,
 )
+from atlas.domain.observability import NullRecorder, Recorder
 from atlas.domain.orchestration import (
     Answer,
     AnswerEvent,
@@ -51,7 +53,7 @@ from atlas.domain.orchestration import (
     Turn,
 )
 from atlas.domain.ports.chat import ChatProvider
-from atlas.domain.ports.prompts import PromptLibrary
+from atlas.domain.ports.prompts import PromptLibrary, RenderedPrompt
 from atlas.domain.retrieval import Citation, PromptContext, RetrievalRequest
 from atlas.domain.usage import TokenUsage
 
@@ -94,6 +96,7 @@ class AnswerService:
         memory: ConversationMemory,
         router: IntentRouter | None = None,
         budget: AnswerBudget | None = None,
+        recorder: Recorder | None = None,
     ) -> None:
         self._chat = chat
         self._prompts = prompts
@@ -102,6 +105,10 @@ class AnswerService:
         self._memory = memory
         self._router = router or IntentRouter()
         self._budget = budget or AnswerBudget()
+        # A no-op unless the composition root wires the real one. The
+        # application layer records through a port; what a Prometheus counter
+        # is stays in infrastructure.
+        self._recorder = recorder or NullRecorder()
 
     async def answer(self, context: UserContext, request: AnswerRequest) -> Answer:
         """Answer in one piece.
@@ -128,10 +135,14 @@ class AnswerService:
         from the way it is streamed is an answer that behaves differently in the
         UI than in the tests.
         """
+        started = time.perf_counter()
         routing = self._route(request)
 
         if routing.intent is Intent.REFUSE:
             answer = self._refuse(routing, context, kind=routing.refusal or "unknown")
+            self._recorder.answer_finished(
+                outcome="refused", intent=routing.intent.value, seconds=_since(started)
+            )
             yield AnswerEvent.delta(answer.text)
             yield AnswerEvent.done(answer)
             return
@@ -148,30 +159,15 @@ class AnswerService:
                 extra={"trace_id": context.trace_id, "intent": routing.intent.value},
             )
             answer = self._refuse(routing, context, kind="unknown")
+            self._recorder.answer_finished(
+                outcome="refused", intent=routing.intent.value, seconds=_since(started)
+            )
             yield AnswerEvent.delta(answer.text)
             yield AnswerEvent.done(answer)
             return
 
-        summary, recent = await self._memory.compress(request.history)
-        messages = _conversation(recent, question=request.question)
-        messages[-1] = Message(
-            role=Role.USER,
-            content=self._prompts.render(
-                "answer",
-                question=request.question,
-                context=prompt_context.text,
-                summary=summary,
-            ).text,
-        )
-
         system = self._prompts.render("system")
-        chat_request = ChatRequest(
-            messages=tuple(messages),
-            system=system.text,
-            tools=tuple(catalog),
-            max_output_tokens=self._budget.max_output_tokens,
-            stream_hint=True,
-        )
+        chat_request = await self._build_request(request, prompt_context, catalog, system)
 
         text_parts: list[str] = []
         tools_called: list[str] = []
@@ -207,10 +203,8 @@ class AnswerService:
                 )
                 break
 
-            results: list[ToolResult] = []
-            for call in calls:
-                tools_called.append(call.name)
-                results.append(await self._tools.execute(context, call))
+            results = await self._execute(context, calls)
+            tools_called.extend(call.name for call in calls)
 
             chat_request = chat_request.with_messages(
                 [
@@ -224,15 +218,51 @@ class AnswerService:
                 ]
             )
 
-        text, citations = _resolve_citations("".join(text_parts), prompt_context.citations)
+        answer = self._finish(
+            context=context,
+            routing=routing,
+            system=system,
+            prompt_context=prompt_context,
+            text="".join(text_parts),
+            tools_called=tools_called,
+            usage=usage,
+            started=started,
+        )
+        yield AnswerEvent.done(answer)
+
+    def _finish(  # noqa: PLR0913 - one call site, and every part is needed
+        self,
+        *,
+        context: UserContext,
+        routing: Routing,
+        system: RenderedPrompt,
+        prompt_context: PromptContext,
+        text: str,
+        tools_called: Sequence[str],
+        usage: TokenUsage | None,
+        started: float,
+    ) -> Answer:
+        """Resolve citations, record what happened, and assemble the answer."""
+        resolved, citations = _resolve_citations(text, prompt_context.citations)
         answer = Answer(
-            text=text,
+            text=resolved,
             citations=citations,
             intent=routing.intent,
             tools_called=tuple(tools_called),
             usage=usage or TokenUsage(),
+            model=self._chat.model,
             prompt_version=system.identity,
             trace_id=context.trace_id,
+        )
+        self._recorder.provider_finished(
+            provider=self._chat.name,
+            model=self._chat.model,
+            outcome="ok",
+            input_tokens=answer.usage.input_tokens,
+            output_tokens=answer.usage.output_tokens,
+        )
+        self._recorder.answer_finished(
+            outcome="answered", intent=routing.intent.value, seconds=_since(started)
         )
         logger.info(
             "answered",
@@ -245,7 +275,61 @@ class AnswerService:
                 "prompt": system.identity,
             },
         )
-        yield AnswerEvent.done(answer)
+        return answer
+
+    async def _build_request(
+        self,
+        request: AnswerRequest,
+        prompt_context: PromptContext,
+        catalog: Sequence[ToolDefinition],
+        system: RenderedPrompt,
+    ) -> ChatRequest:
+        """Assemble the first chat request: history, context, question, tools.
+
+        History is compressed here rather than by the caller because the
+        summariser is a model call, and doing it before the refusal checks would
+        spend one on a question that is about to be declined.
+        """
+        summary, recent = await self._memory.compress(request.history)
+        messages = _conversation(recent, question=request.question)
+        # The last turn is the question, rendered with whatever context and
+        # summary came back. Everything before it is the conversation as it was.
+        messages[-1] = Message(
+            role=Role.USER,
+            content=self._prompts.render(
+                "answer",
+                question=request.question,
+                context=prompt_context.text,
+                summary=summary,
+            ).text,
+        )
+        return ChatRequest(
+            messages=tuple(messages),
+            system=system.text,
+            tools=tuple(catalog),
+            max_output_tokens=self._budget.max_output_tokens,
+            stream_hint=True,
+        )
+
+    async def _execute(self, context: UserContext, calls: Sequence[ToolCall]) -> list[ToolResult]:
+        """Run the tools the model asked for, in the order it asked.
+
+        Sequential rather than concurrent. The calls in one round are usually a
+        lookup followed by a narrowing of it, and Odoo is a synchronous worker
+        pool — firing four at once takes four workers away from the ERP to save
+        a fraction of one model call.
+        """
+        results: list[ToolResult] = []
+        for call in calls:
+            started = time.perf_counter()
+            result = await self._tools.execute(context, call)
+            self._recorder.tool_finished(
+                tool=call.name,
+                outcome="rejected" if result.is_error else "ok",
+                seconds=_since(started),
+            )
+            results.append(result)
+        return results
 
     def _route(self, request: AnswerRequest) -> Routing:
         if request.intent is not None:
@@ -294,6 +378,11 @@ class AnswerService:
             prompt_version=refusal.identity,
             trace_id=context.trace_id,
         )
+
+
+def _since(started: float) -> float:
+    """Seconds elapsed, from a monotonic clock rather than the wall."""
+    return time.perf_counter() - started
 
 
 def _conversation(history: Sequence[Turn], *, question: str) -> list[Message]:

@@ -18,7 +18,7 @@ can be reviewed on its own; none depends on a later milestone to make sense.
 | M9 | Structured query tools | Done |
 | M10 | Orchestration and answer synthesis | Done |
 | M11 | Odoo chat UI | Done |
-| M12 | Evaluation and observability | Planned |
+| M12 | Evaluation and observability | Done |
 | M13 | Security hardening and performance | Planned |
 | M14 | CI/CD, release engineering and documentation | Planned |
 | M15 | 1.0.0 | Planned |
@@ -296,13 +296,18 @@ cited record open. A second tour covers a follow-up in the same conversation.
 
 ## M12 — Evaluation and observability
 
+Status: done.
+
 - Golden question set with labelled relevant documents
 - Retrieval metrics: recall@k, MRR, nDCG, with a regression gate in CI
 - Answer faithfulness and citation coverage checks
 - OpenTelemetry tracing and Prometheus metrics
 - Per-conversation cost reporting in Odoo
 
-Acceptance: `make eval` prints a metrics table and a retrieval regression fails CI.
+Acceptance: `make eval` prints a metrics table and a retrieval regression fails
+CI. The gate runs offline — a file corpus, a deterministic embedder, an
+in-memory store — so it needs no API key and no bill. A test proves it gates by
+making a floor unreachable and asserting the run exits non-zero.
 
 ## M13 — Security hardening and performance
 

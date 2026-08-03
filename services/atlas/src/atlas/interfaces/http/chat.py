@@ -25,8 +25,10 @@ from pydantic import BaseModel, Field
 
 from atlas.config.container import Container
 from atlas.domain.authorization import UserContext
-from atlas.domain.errors import AtlasError
+from atlas.domain.errors import AtlasError, ConfigurationError
 from atlas.domain.orchestration import AnswerEvent, AnswerRequest, EventKind, Intent, Turn
+from atlas.domain.usage import TokenUsage
+from atlas.infrastructure.providers.pricing import estimate_cost
 from atlas.interfaces.http.middleware import TRACE_ID_SCOPE_KEY
 
 logger = logging.getLogger(__name__)
@@ -129,6 +131,23 @@ async def _events(
         yield _encode(AnswerEvent.error("The answer could not be completed."))
 
 
+def _cost(model: str, usage: TokenUsage) -> float:
+    """What this answer cost, in US dollars.
+
+    An estimate. Providers round and occasionally reprice, and a model nobody
+    has priced yet reports zero rather than failing the request — a missing cost
+    figure is a reporting gap, not a reason to withhold an answer somebody is
+    already reading.
+    """
+    if not model:
+        return 0.0
+    try:
+        return float(estimate_cost(model, usage))
+    except ConfigurationError:
+        logger.warning("no price configured for %s; reporting zero cost", model)
+        return 0.0
+
+
 def _encode(event: AnswerEvent) -> str:
     """One event, in the SSE wire format.
 
@@ -149,6 +168,8 @@ def _encode(event: AnswerEvent) -> str:
             "tools_called": list(answer.tools_called),
             "prompt_version": answer.prompt_version,
             "trace_id": answer.trace_id,
+            "model": answer.model,
+            "cost_usd": _cost(answer.model, answer.usage),
             "usage": {
                 "input_tokens": answer.usage.input_tokens,
                 "output_tokens": answer.usage.output_tokens,

@@ -1,0 +1,87 @@
+# The golden question set.
+#
+# Each question names the documents an answer to it ought to rest on. Labels are
+# document keys rather than chunk ids: chunking is an implementation detail that
+# moves, and a golden set needing relabelling every time the chunk size changes
+# is one nobody maintains.
+#
+# The labels are a judgement, and the `note` on each says what the judgement
+# was. When a metric drops, the first question is whether retrieval got worse or
+# the label was wrong — a set with no reasoning recorded cannot answer that.
+#
+# Questions are grouped by what they exercise. Adding one is welcome; adding one
+# whose label is obvious from a keyword match is not, because a set that only
+# rewards lexical overlap will happily approve deleting the dense half.
+
+questions:
+  # -- exact identifiers. Lexical search should carry these. --------------
+  - id: order-by-reference
+    question: what is the status of S00042?
+    relevant: [order-s00042]
+    note: >
+      An exact reference. S00041 and S00043 are near-identical in wording, so
+      this fails the moment retrieval matches on shape rather than on the token.
+
+  - id: invoice-by-reference
+    question: is INV/2026/0104 paid?
+    relevant: [invoice-inv2026-0104]
+    note: >
+      A slashed reference. Tokenisers that split on punctuation turn this into
+      a query for the year, which matches every 2026 document.
+
+  # -- meaning without shared words. Dense search should carry these. -----
+  - id: money-owed
+    question: who still owes us money?
+    relevant: [invoice-inv2026-0117]
+    note: >
+      The document says "amount still outstanding" and "not paid"; the question
+      says "owes". No shared content word, which is the point.
+
+  - id: returning-goods
+    question: how long do customers have to send something back?
+    relevant: [policy-refunds]
+    note: >
+      "Send something back" against "returned within 30 days". Deliberately
+      avoids the word refund, which would make this a lexical hit.
+
+  - id: broken-furniture
+    question: what happens if a desk arrives damaged?
+    relevant: [policy-warranty, policy-refunds]
+    note: >
+      Two policies both bear on this and neither is complete alone — the
+      warranty covers defects, the refund policy covers the return itself.
+      A question with a single labelled document would reward a narrower
+      answer than the honest one.
+
+  # -- disambiguation. The confusable records earn their place here. ------
+  - id: acme-the-customer
+    question: tell me about Acme Corporation
+    relevant: [partner-acme]
+    note: >
+      Acme Logistics shares the first word and is explicitly a different
+      company. Retrieving both is not wrong; ranking Logistics first is.
+
+  - id: credit-hold-reason
+    question: why is Brightwave on credit hold?
+    relevant: [note-credit-hold, partner-brightwave, invoice-inv2026-0117]
+    note: >
+      The answer is spread across three records: the partner states the hold,
+      the note gives the reason, the invoice is the subject of the dispute.
+      This is the question that measures whether the whole story is assembled
+      rather than the first plausible fragment.
+
+  # -- questions with a live answer, included on purpose. -----------------
+  - id: confirmed-orders
+    question: which sales orders are confirmed?
+    relevant: [order-s00041, order-s00043]
+    note: >
+      A tool answers this better than retrieval does, and in production the
+      router sends it to one. It is scored anyway: retrieval is the fallback
+      when a tool is unavailable, and knowing how bad the fallback is matters.
+
+  - id: assembly-instructions
+    question: how do I put a conference table together?
+    relevant: [manual-assembly]
+    note: >
+      A document nothing else in the corpus resembles. A control: if this ever
+      fails, the problem is not ranking.

@@ -48,6 +48,12 @@ jobs:
       - name: import-linter (architectural layering)
         run: lint-imports
 
+      # Offline: a file corpus, a deterministic embedder, an in-memory store.
+      # No services and no API key, so it can gate a pull request. Exits
+      # non-zero when a floor in interfaces/evaluate.py is not cleared.
+      - name: Retrieval evaluation (regression gate)
+        run: python -m atlas.interfaces.evaluate
+
   test:
     name: Unit and contract tests
     runs-on: ubuntu-latest

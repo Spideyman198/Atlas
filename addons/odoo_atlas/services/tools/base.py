@@ -36,6 +36,4 @@ class Tool:
 
     def available_in(self, env):
         """Whether this database can serve the tool to the acting user."""
-        return all(
-            model in env and env[model].has_access("read") for model in self.models
-        )
+        return all(model in env and env[model].has_access("read") for model in self.models)

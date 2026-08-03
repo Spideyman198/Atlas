@@ -147,7 +147,7 @@ class TestChatController(HttpCase):
         """A reload mid-answer should still show what was asked."""
         self.authenticate("atlas-chat-user", "atlas-chat-user")
 
-        def slow(question, token, *, history=None, conversation_id=None):
+        def slow(_question, _token, *, history=None, conversation_id=None):  # noqa: ARG001
             stored = (
                 self.env["atlas.message"]
                 .with_user(self.user)
@@ -377,9 +377,7 @@ class TestSuggestions(HttpCase):
 
     def test_a_model_the_user_cannot_read_is_not_offered(self):
         stranger = new_test_user(self.env, login="atlas-no-partner-access")
-        with patch.object(
-            type(self.env["res.partner"]), "has_access", lambda self, operation: False
-        ):
+        with patch.object(type(self.env["res.partner"]), "has_access", lambda *_: False):
             offered = self.env["atlas.conversation"].with_user(stranger).atlas_suggestions()
 
         for _model, question in suggestions.CANDIDATES:

@@ -74,8 +74,12 @@ class AtlasChatController(http.Controller):
             return _error_response("That conversation is not available.")
 
         conversation.env["atlas.message"].create(
-            {"conversation_id": conversation.id, "role": "user", "content": question,
-             "status": "done"}
+            {
+                "conversation_id": conversation.id,
+                "role": "user",
+                "content": question,
+                "status": "done",
+            }
         )
 
         # Captured now: none of this is reachable once the generator runs.
@@ -131,9 +135,7 @@ def _stream(state):
     except Exception:
         # The user has already read the answer; losing the transcript is worth a
         # log line, not an error event that contradicts what is on their screen.
-        logger.exception(
-            "could not store the answer for conversation %s", state["conversation_id"]
-        )
+        logger.exception("could not store the answer for conversation %s", state["conversation_id"])
 
 
 def _persist(state, text, final, failure):
@@ -155,6 +157,11 @@ def _persist(state, text, final, failure):
                 "trace_id": payload.get("trace_id") or False,
                 "prompt_tokens": (payload.get("usage") or {}).get("input_tokens", 0),
                 "completion_tokens": (payload.get("usage") or {}).get("output_tokens", 0),
+                # Priced by the engine, which is where the price table lives.
+                # Odoo storing a copy of that table would give two of them to
+                # keep in step, and they would diverge on the first repricing.
+                "cost": payload.get("cost_usd") or 0.0,
+                "model_used": payload.get("model") or False,
             }
         )
         citations = [

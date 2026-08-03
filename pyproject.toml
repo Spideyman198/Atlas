@@ -176,6 +176,13 @@ implicit_reexport = true
 module = ["llama_index.readers.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# The OTLP exporter is an optional extra: it pulls in grpc, and a deployment
+# that never traces should not pay for it. The one import of it is guarded by
+# `try/except ImportError` and degrades to tracing staying off.
+module = ["opentelemetry.exporter.*"]
+ignore_missing_imports = true
+
 [tool.pydantic-mypy]
 init_forbid_extra = true
 init_typed = true

@@ -158,17 +158,13 @@ class TestFindRecords(AtlasCase):
 
     def test_a_model_the_user_cannot_read_is_refused(self):
         """What a tool can see is what the person who asked could see."""
-        self.assertFalse(
-            self.env["ir.config_parameter"].with_user(self.alice).has_access("read")
-        )
+        self.assertFalse(self.env["ir.config_parameter"].with_user(self.alice).has_access("read"))
 
         with self.assertRaises(FilterError):
             self.run_tool("find_records", {"model": "ir.config_parameter"})
 
     def test_the_row_cap_cannot_be_argued_past(self):
-        result = self.run_tool(
-            "find_records", {"model": "res.partner", "limit": 100_000}
-        )
+        result = self.run_tool("find_records", {"model": "res.partner", "limit": 100_000})
 
         self.assertLessEqual(result["returned"], catalog.MAX_ROWS)
 

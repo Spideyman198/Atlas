@@ -121,6 +121,10 @@ class Answer:
     intent: Intent = Intent.HYBRID
     tools_called: tuple[str, ...] = ()
     usage: TokenUsage = field(default_factory=TokenUsage)
+    #: Which model produced this. Carried so cost can be computed where pricing
+    #: lives — in infrastructure — rather than dragging a price table into the
+    #: domain, where it would go stale next to code that never changes.
+    model: str = ""
     prompt_version: str = ""
     trace_id: str | None = None
 

@@ -48,14 +48,22 @@ dependencies = [
     "httpx==0.28.1",
     # Present transitively already, pinned because prompts import it directly.
     "jinja2==3.1.6",
+    "pyyaml==6.0.3",
+    "prometheus-client==0.24.1",
+    "opentelemetry-api==1.39.0",
+    "opentelemetry-sdk==1.39.0",
     "llama-index-core==0.14.23",
     "llama-index-readers-file==0.6.0",
 ]
 
 [project.scripts]
 atlas = "atlas.interfaces.cli:main"
+atlas-eval = "atlas.interfaces.evaluate:main"
 
 [project.optional-dependencies]
+# The OTLP exporter pulls in grpc. A deployment that never traces should not pay
+# for it, so it is opt-in: `pip install atlas[otlp]`.
+otlp = ["opentelemetry-exporter-otlp-proto-grpc==1.39.0"]
 dev = [
     "pytest==9.1.1",
     "pytest-cov==7.1.0",
@@ -64,6 +72,7 @@ dev = [
     # raises StarletteDeprecationWarning, which `filterwarnings = ["error"]`
     # correctly refuses to tolerate.
     "httpx2==2.9.1",
+    "types-PyYAML==6.0.12.20250915",
     "ruff==0.16.1",
     "mypy==2.3.0",
     "import-linter==2.13",

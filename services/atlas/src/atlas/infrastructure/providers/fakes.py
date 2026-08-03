@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 import struct
 from collections import deque
 from collections.abc import AsyncIterator, Iterable, Sequence
@@ -24,6 +25,10 @@ from atlas.domain.chat import (
 from atlas.domain.embedding import EmbeddingPurpose, EmbeddingResult, Vector
 from atlas.domain.errors import ValidationError
 from atlas.domain.usage import TokenUsage
+
+#: Word characters and digits. Punctuation separates, so `INV/2026/0104` becomes
+#: three tokens rather than one nothing else will ever match.
+_TOKENS = re.compile(r"[a-z0-9]+")
 
 _DEFAULT_REPLY = "This is a fake response."
 
@@ -214,5 +219,95 @@ class HashEmbeddingProvider:
 
         norm = math.sqrt(sum(v * v for v in values))
         if norm == 0.0:  # pragma: no cover - impossible for a non-empty digest
+            return tuple(values)
+        return tuple(v / norm for v in values)
+
+
+class TokenEmbeddingProvider:
+    """A deterministic embedder where similar text produces similar vectors.
+
+    :class:`HashEmbeddingProvider` digests the whole string, so two documents
+    differing by one word are as far apart as two unrelated ones. That is fine
+    for plumbing tests and useless for evaluation: the dense half of retrieval
+    scores noise, and a metric over noise measures nothing.
+
+    This hashes *tokens* into buckets instead — feature hashing, the oldest
+    trick there is. Texts sharing words land near each other, so dense search
+    genuinely contributes and fusion is exercised on something real.
+
+    What it is not is semantic. "Owes" and "outstanding" share no characters and
+    so share no bucket, and questions in the golden set that turn on that will
+    score badly here. That is the honest limit of an offline gate, and it is why
+    the same harness can run against a real provider when one is configured.
+    """
+
+    def __init__(
+        self,
+        *,
+        dimensions: int = 256,
+        model_id: str = "token-embedding-v1",
+        max_batch_size: int = 96,
+    ) -> None:
+        if dimensions <= 0:
+            msg = "dimensions must be positive"
+            raise ValidationError(msg)
+        self._dimensions = dimensions
+        self._model_id = model_id
+        self._max_batch_size = max_batch_size
+        self.call_count = 0
+
+    @property
+    def name(self) -> str:
+        return "token"
+
+    @property
+    def model_id(self) -> str:
+        return self._model_id
+
+    @property
+    def dimensions(self) -> int:
+        return self._dimensions
+
+    @property
+    def max_batch_size(self) -> int:
+        return self._max_batch_size
+
+    async def embed(
+        self,
+        texts: Sequence[str],
+        purpose: EmbeddingPurpose = EmbeddingPurpose.DOCUMENT,
+    ) -> EmbeddingResult:
+        if not texts:
+            msg = "texts must not be empty"
+            raise ValidationError(msg)
+        if len(texts) > self._max_batch_size:
+            msg = f"batch of {len(texts)} exceeds max_batch_size {self._max_batch_size}"
+            raise ValidationError(msg, context={"batch_size": len(texts)})
+
+        self.call_count += 1
+        return EmbeddingResult(
+            vectors=tuple(self._vector(text) for text in texts),
+            model=self._model_id,
+            usage=TokenUsage(input_tokens=sum(len(t.split()) for t in texts)),
+        )
+
+    def _vector(self, text: str) -> Vector:
+        """Sum one bucket per token, then normalise.
+
+        The purpose is deliberately ignored. A query and a document containing
+        the same word must land in the same bucket, and salting by purpose — as
+        the digest embedder does — would put them in different ones.
+        """
+        values = [0.0] * self._dimensions
+        for token in _TOKENS.findall(text.lower()):
+            digest = hashlib.blake2b(token.encode(), digest_size=8).digest()
+            bucket = int.from_bytes(digest[:4], "big") % self._dimensions
+            # A sign bit taken from the digest, so unrelated tokens colliding in
+            # one bucket cancel as often as they reinforce.
+            sign = 1.0 if digest[4] & 1 else -1.0
+            values[bucket] += sign
+
+        norm = math.sqrt(sum(v * v for v in values))
+        if norm == 0.0:
             return tuple(values)
         return tuple(v / norm for v in values)

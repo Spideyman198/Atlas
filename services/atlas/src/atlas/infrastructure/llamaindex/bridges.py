@@ -60,6 +60,11 @@ COMPANY_ID = "atlas_company_id"
 VISIBILITY = "atlas_visibility"
 EXTERNAL_REF = "atlas_external_ref"
 
+#: The chunk's own metadata, carried whole under one key so it cannot collide
+#: with the plumbing keys above. Without this it is dropped on the way through
+#: LlamaIndex, and `record_name` — what a citation is labelled with — is lost.
+CHUNK_METADATA = "atlas_metadata"
+
 _WRITES_REFUSED = (
     "the Atlas vector store is read-only from LlamaIndex: ingestion writes "
     "through PgVectorStore so that one schema and one migration history exist "
@@ -261,6 +266,7 @@ def to_node(candidate: CandidateChunk) -> TextNode:
             COMPANY_ID: candidate.company_id,
             VISIBILITY: int(candidate.visibility),
             EXTERNAL_REF: candidate.external_ref,
+            CHUNK_METADATA: dict(candidate.metadata or {}),
         },
         # Metadata is plumbing, not content. Leaving it in would put
         # `atlas_chunk_id: 41` into the text a model reads and an embedding
@@ -283,6 +289,7 @@ def to_candidate(node: BaseNode, score: float) -> CandidateChunk:
         company_id=metadata.get(COMPANY_ID),
         visibility=Visibility(int(metadata.get(VISIBILITY, Visibility.INTERNAL))),
         external_ref=metadata.get(EXTERNAL_REF),
+        metadata=metadata.get(CHUNK_METADATA) or {},
     )
 
 
@@ -292,6 +299,7 @@ def as_vector(values: Sequence[float]) -> Vector:
 
 
 _METADATA_KEYS = [
+    CHUNK_METADATA,
     CHUNK_ID,
     DOCUMENT_ID,
     RES_MODEL,

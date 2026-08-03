@@ -25,13 +25,14 @@ from contextlib import asynccontextmanager
 from typing import Final
 
 from fastapi import APIRouter, FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from atlas import __version__
 from atlas.config.container import Container
 from atlas.config.logging import configure_logging
 from atlas.config.settings import get_settings
 from atlas.domain.errors import AtlasError
+from atlas.infrastructure.observability import configure_tracing, metrics
 from atlas.interfaces.http.chat import router as chat_router
 from atlas.interfaces.http.errors import register_exception_handlers
 from atlas.interfaces.http.ingest import router as ingest_router
@@ -58,6 +59,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Build the composition root and hold it for the process lifetime."""
     settings = get_settings()
     configure_logging(level=settings.log_level, json_output=settings.log_json)
+    configure_tracing(
+        endpoint=settings.observability.otlp_endpoint,
+        service_name=settings.service_name,
+        environment=settings.env,
+    )
 
     container = await Container.create(settings)
     app.state.container = container
@@ -68,6 +74,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         await container.aclose()
         logger.info("atlas engine stopped")
+
+
+@router.get(
+    "/metrics",
+    summary="Prometheus metrics",
+    response_class=Response,
+    include_in_schema=False,
+)
+async def prometheus_metrics(request: Request) -> Response:
+    """Counters and histograms, in Prometheus' exposition format.
+
+    Deliberately outside the OpenAPI schema: it is scraped by a collector, not
+    called by a client, and listing it as an API invites somebody to build on
+    the format.
+
+    Nothing here is per-user or per-question. The series are labelled by
+    outcome, intent, tool and provider only, so scraping is not a way to learn
+    what anybody asked.
+    """
+    container: Container | None = getattr(request.app.state, "container", None)
+    if container is not None and not container.settings.observability.metrics_enabled:
+        return Response(status_code=404)
+    return Response(content=metrics.render(), media_type=metrics.CONTENT_TYPE)
 
 
 @router.get("/healthz", summary="Liveness probe")

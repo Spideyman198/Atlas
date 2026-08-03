@@ -138,6 +138,17 @@ test-odoo: ## Install the addon on a throwaway database and run its test suite
 	  --test-enable --test-tags /odoo_atlas \
 	  --stop-after-init --max-cron-threads=0 --log-level=test
 
+# Offline: a file corpus, a deterministic embedder, an in-memory store. It needs
+# no services and no API key, which is the only reason CI can gate on it — a
+# metric that costs money to produce is one that eventually stops being produced.
+.PHONY: eval
+eval: ## Score retrieval against the golden set and fail on a regression
+	$(TOOLS) python -m atlas.interfaces.evaluate
+
+.PHONY: eval-live
+eval-live: ## Score the golden set against the configured provider and corpus
+	$(COMPOSE) exec atlas-api python -m atlas.interfaces.evaluate --live
+
 .PHONY: migrate
 migrate: ## Apply Alembic migrations to the Atlas database
 	$(COMPOSE) exec atlas-api alembic upgrade head
@@ -151,7 +162,7 @@ migrate-status: ## Show the revision the Atlas database is on
 	$(COMPOSE) exec atlas-api alembic current
 
 .PHONY: check
-check: lint type imports test test-odoo ## Run everything CI runs
+check: lint type imports test eval test-odoo ## Run everything CI runs
 
 # --- teardown --------------------------------------------------------------
 

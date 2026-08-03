@@ -46,8 +46,7 @@ class TestTheBrowserTestsCanRun(HttpCase):
     def test_the_websocket_client_is_installed(self):
         self.assertIsNotNone(
             importlib.util.find_spec("websocket"),
-            "websocket-client is missing, so HttpCase would skip every tour "
-            "rather than run it.",
+            "websocket-client is missing, so HttpCase would skip every tour rather than run it.",
         )
 
 
@@ -70,7 +69,7 @@ class TestChatTour(HttpCase):
         """An answer that cites a record the user can actually open."""
         partner_id = self.partner.id
 
-        def stream_answer(question, token, *, history=None, conversation_id=None):
+        def stream_answer(_question, _token, *, history=None, conversation_id=None):  # noqa: ARG001
             yield "delta", {"text": "Acme Corporation "}
             yield "delta", {"text": "has one open order. [1]"}
             yield (
