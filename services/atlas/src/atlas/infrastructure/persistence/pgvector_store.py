@@ -32,10 +32,31 @@ from atlas.domain.errors import StorageError, ValidationError
 
 logger = logging.getLogger(__name__)
 
-#: Ask the HNSW walk to keep scanning until enough rows survive the WHERE clause.
-#: Without it, a filtered ANN query can exhaust its candidate list on rows the
-#: filter rejects and silently return too few results (ADR-0004).
-_ITERATIVE_SCAN: Final = "SET LOCAL hnsw.iterative_scan = relaxed_order"
+#: What a filtered dense search needs, and why each half is needed.
+#:
+#: `iterative_scan` asks the HNSW walk to keep going until enough rows survive
+#: the WHERE clause. Without it a filtered ANN query exhausts its candidate list
+#: on rows the filter rejects and silently returns too few (ADR-0004) — measured
+#: at 5.1 rows for a LIMIT of 8.
+#:
+#: The scan settings are the half that was missing. With a company filter
+#: matching a third of the table, the planner costs a bitmap scan over the
+#: `(company_id, visibility)` index below an HNSW walk and takes it — then sorts
+#: sixteen thousand rows by distance. `iterative_scan` never applies, because it
+#: only governs an index scan that was never chosen. Measured at 50k chunks:
+#:
+#:     planner free                126.95 ms p50   8.0 rows
+#:     forced index, no iterative    2.82 ms p50   5.1 rows   ← incomplete
+#:     forced index + iterative      3.94 ms p50   8.0 rows
+#:
+#: Scoped with SET LOCAL to the dense search's own transaction. The lexical
+#: search *wants* a bitmap scan — that is how a GIN index is read — so this must
+#: never leak onto it.
+_DENSE_SCAN_SETTINGS: Final = (
+    "SET LOCAL hnsw.iterative_scan = relaxed_order",
+    "SET LOCAL enable_bitmapscan = off",
+    "SET LOCAL enable_seqscan = off",
+)
 
 _CHUNK_COLUMNS: Final = """
     c.id, c.document_id, c.content, c.res_model, c.res_id,
@@ -281,7 +302,8 @@ class PgVectorStore:
             ):
                 if iterative:
                     # SET LOCAL needs a transaction; the block above provides one.
-                    await cur.execute(_ITERATIVE_SCAN)
+                    for setting in _DENSE_SCAN_SETTINGS:
+                        await cur.execute(setting)
                 await cur.execute(statement, params)
                 rows = await cur.fetchall()
         except psycopg.Error as exc:

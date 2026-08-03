@@ -283,6 +283,35 @@ class ObservabilitySettings(BaseModel):
     )
 
 
+class SecuritySettings(BaseModel):
+    """Limits and filters applied to every request."""
+
+    model_config = {"frozen": True}
+
+    rate_limit_per_minute: int = Field(
+        default=15,
+        gt=0,
+        description=(
+            "Questions per user per minute, sustained. Keyed on the context "
+            "token rather than the address: everyone in an Odoo deployment "
+            "arrives from the same handful of IPs."
+        ),
+    )
+    rate_limit_burst: int = Field(
+        default=5,
+        gt=0,
+        description="Questions allowed back to back before the sustained rate applies.",
+    )
+    redact_secrets: bool = Field(
+        default=True,
+        description=(
+            "Strip credentials and regulated identifiers from context and tool "
+            "results. Names, emails and phone numbers are deliberately kept: "
+            "they are what the questions are about (docs/security.md)."
+        ),
+    )
+
+
 class Settings(BaseSettings):
     """Engine configuration, sourced from ``ATLAS_*`` environment variables.
 
@@ -314,6 +343,7 @@ class Settings(BaseSettings):
     ingestion: IngestionSettings = IngestionSettings()
     retrieval: RetrievalSettings = RetrievalSettings()
     observability: ObservabilitySettings = ObservabilitySettings()
+    security: SecuritySettings = SecuritySettings()
 
     @property
     def is_production(self) -> bool:

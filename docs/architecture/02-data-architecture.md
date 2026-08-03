@@ -241,6 +241,10 @@ record rules prevent reading someone else's conversation, and
 ```sql
 -- Dense retrieval. HNSW: incremental builds, no training step, best recall/latency.
 -- See ADR-0004 for why not IVFFlat.
+-- m = 16, ef_construction = 64 chosen by measurement, not by default:
+-- m = 32 costs 3x the build time and is slower at query time for no recall
+-- advantage; ef_construction = 128 doubles build time for a gain that
+-- ef_search buys more cheaply — and ef_search needs no rebuild.
 CREATE INDEX chunks_embedding_hnsw_idx
     ON chunks USING hnsw (embedding vector_cosine_ops)
     WITH (m = 16, ef_construction = 64);
@@ -270,9 +274,11 @@ CREATE INDEX ingest_jobs_claim_idx ON ingest_jobs (status, run_after)
 
 | Parameter | Value | Why |
 | --- | --- | --- |
-| `hnsw.ef_search` | 40–100, tuned in M13 | Recall/latency dial. Higher = better recall, more work. |
-| `hnsw.iterative_scan` | `relaxed_order` | Keeps scanning until enough rows survive the `WHERE` filter. The fix for filtered-ANN recall collapse. |
+| `hnsw.ef_search` | `40` | Measured: p50 2.0 ms at 50k chunks. Raising it to 200 roughly doubles p50 for a recall gain worth having only if production recall proves short ([performance.md](../performance.md)). |
+| `hnsw.iterative_scan` | `relaxed_order` | Keeps scanning until enough rows survive the `WHERE` filter. Without it a filtered search returned 5.1 rows for a `LIMIT` of 8. |
+| `enable_bitmapscan`, `enable_seqscan` | `off`, dense search only | Measured: without them the planner takes a bitmap scan over `(company_id, visibility)` and sorts 16,666 rows — 126.95 ms instead of 3.94 ms. `SET LOCAL`, because the lexical search needs a bitmap scan. |
 | `maintenance_work_mem` | ≥ 1 GB during index build | HNSW builds in memory or spills catastrophically. |
+| `shm_size` on the container | ≥ 2 GB | A parallel HNSW build asks for ~1 GB of shared memory. Docker's 64 MB default fails with "No space left on device", which is not a disk problem. |
 | Over-fetch factor | `k * 4` | Headroom for the authorization post-filter's denial rate. |
 
 ## 4. Performance design
@@ -292,8 +298,15 @@ Ordered by impact, which is roughly the reverse of the order people usually atta
 6. **Pool connections** (`psycopg_pool`) in the engine; Odoo manages its own pool.
 7. **Cap the context budget in tokens, not chunk count.** Prompt cost is the largest
    per-query expense.
-8. **`EXPLAIN (ANALYZE, BUFFERS)` in the benchmark suite (M13)**, so performance
-   claims in the README come with numbers.
+8. **`EXPLAIN (ANALYZE, BUFFERS)` in the benchmark suite**, so performance claims
+   come with numbers. `make bench` produces them; the results and what they do
+   and do not establish are in [performance.md](../performance.md).
+
+**No query cache.** Retrieval measured ~4 ms p50 against a request dominated by
+seconds of model call. Adding a cache in front of it would buy 0.1% and cost an
+invalidation problem. The cache that pays for itself is the embedding cache
+above, which already exists. This is a decision the numbers made — before
+measuring, a retrieval cache looked like an obvious win.
 
 ## 5. Migration policy
 

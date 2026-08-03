@@ -26,6 +26,7 @@ from atlas.domain.authorization import UserContext
 from atlas.domain.corpus import AuthorizedChunk
 from atlas.domain.observability import NullRecorder, Recorder
 from atlas.domain.ports.retriever import Retriever
+from atlas.domain.redaction import redact
 from atlas.domain.retrieval import (
     Citation,
     PromptContext,
@@ -54,8 +55,9 @@ class ContextAssembler:
     here is formatting.
     """
 
-    def __init__(self, *, snippet_chars: int = SNIPPET_CHARS) -> None:
+    def __init__(self, *, snippet_chars: int = SNIPPET_CHARS, redaction: bool = True) -> None:
         self._snippet_chars = snippet_chars
+        self._redaction = redaction
 
     def assemble(self, chunks: Sequence[AuthorizedChunk], *, budget: int) -> PromptContext:
         """Fit as much context as the budget allows, best first.
@@ -75,9 +77,20 @@ class ContextAssembler:
         used = 0
         dropped = 0
 
+        removed: dict[str, int] = {}
         for chunk in chunks:
             label = _label(chunk)
-            block = _BLOCK.format(index=len(blocks) + 1, label=label, content=chunk.content)
+            content = chunk.content
+            if self._redaction:
+                # The last point before ERP text becomes prompt text. Doing it
+                # here rather than at ingestion keeps the corpus faithful to the
+                # records: what is indexed is what Odoo holds, and what leaves
+                # the process is what a provider may see.
+                cleaned = redact(content)
+                content = cleaned.text
+                for kind, count in cleaned.counts.items():
+                    removed[kind] = removed.get(kind, 0) + count
+            block = _BLOCK.format(index=len(blocks) + 1, label=label, content=content)
             cost = estimate_tokens(block)
             if used + cost > budget:
                 dropped += 1

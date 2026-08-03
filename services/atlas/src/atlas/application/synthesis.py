@@ -52,8 +52,10 @@ from atlas.domain.orchestration import (
     Routing,
     Turn,
 )
+from atlas.domain.output_guard import inspect as inspect_output
 from atlas.domain.ports.chat import ChatProvider
 from atlas.domain.ports.prompts import PromptLibrary, RenderedPrompt
+from atlas.domain.redaction import redact
 from atlas.domain.retrieval import Citation, PromptContext, RetrievalRequest
 from atlas.domain.usage import TokenUsage
 
@@ -242,8 +244,38 @@ class AnswerService:
         usage: TokenUsage | None,
         started: float,
     ) -> Answer:
-        """Resolve citations, record what happened, and assemble the answer."""
+        """Resolve citations, check the output, and assemble the answer."""
         resolved, citations = _resolve_citations(text, prompt_context.citations)
+
+        # Last gate before a person reads this. The redaction upstream covers
+        # what went in; this covers a model that reconstructed something, and a
+        # model that was talked into quoting its own instructions.
+        cleaned = redact(resolved)
+        if cleaned.redacted:
+            logger.warning(
+                "redacted a generated answer",
+                extra={"trace_id": context.trace_id, "redactions": cleaned.counts},
+            )
+        resolved = cleaned.text
+
+        if not inspect_output(resolved, instructions=system.text).safe:
+            logger.warning(
+                "answer reproduced the system prompt; replacing it",
+                extra={"trace_id": context.trace_id},
+            )
+            self._recorder.answer_finished(
+                outcome="blocked", intent=routing.intent.value, seconds=_since(started)
+            )
+            return Answer(
+                text=self._prompts.render("refusal", kind="unknown").text,
+                refused=True,
+                intent=routing.intent,
+                usage=usage or TokenUsage(),
+                model=self._chat.model,
+                prompt_version=system.identity,
+                trace_id=context.trace_id,
+            )
+
         answer = Answer(
             text=resolved,
             citations=citations,

@@ -69,6 +69,7 @@ function Show-Help {
         @('test-all',    'Run every test tier with the coverage gate'),
         @('test-odoo',   'Install the addon on a throwaway database and run its tests'),
         @('eval',        'Score retrieval against the golden set and gate on it'),
+        @('bench',       'Sweep HNSW parameters and report recall and latency'),
         @('migrate',     'Apply Alembic migrations to the Atlas database'),
         @('check',       'Run everything CI runs'),
         @('clean',       'Stop the stack and DELETE all data')
@@ -173,6 +174,22 @@ switch ($Target) {
 
     'eval-live' {
         Invoke-Checked ($Compose + @('exec', 'atlas-api', 'python', '-m', 'atlas.interfaces.evaluate', '--live'))
+    }
+
+    # Needs a database it may create and drop tables in — never the corpus.
+    'bench' {
+        $user = Get-EnvValue 'POSTGRES_USER' 'odoo'
+        $password = Get-EnvValue 'POSTGRES_PASSWORD' 'odoo_dev_password'
+        $database = 'atlas_bench'
+        Invoke-Checked ($Compose + @('up', '--detach', 'postgres'))
+        & $Compose[0] @($Compose[1..($Compose.Length - 1)] + @('exec', '-T', 'postgres',
+            'createdb', '-U', $user, $database)) 2>$null
+        Invoke-Checked ($Compose + @('exec', '-T', 'postgres', 'psql', '-U', $user,
+            '-d', $database, '-c', 'CREATE EXTENSION IF NOT EXISTS vector'))
+        $dsn = "postgresql://${user}:${password}@postgres:5432/$database"
+        Invoke-Checked ($Compose + @('--profile', 'tools', 'run', '--rm',
+            '-e', "ATLAS_BENCH_DATABASE_URL=$dsn", 'atlas-tools',
+            'python', '-m', 'atlas.interfaces.benchmark'))
     }
 
     'check' {

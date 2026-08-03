@@ -31,6 +31,7 @@ from atlas.domain.ports.embedding import EmbeddingProvider
 from atlas.domain.ports.prompts import PromptLibrary
 from atlas.domain.ports.retriever import Retriever
 from atlas.domain.ports.vector_store import VectorStore
+from atlas.domain.rate_limit import TokenBucketLimiter
 from atlas.infrastructure.llamaindex import LlamaIndexDocumentLoader, LlamaIndexHybridRetriever
 from atlas.infrastructure.observability.recorder import PrometheusRecorder
 from atlas.infrastructure.odoo import OdooHttpGateway, OdooHttpSourceReader
@@ -73,6 +74,12 @@ class Container:
         self._loader = loader
         self._prompts = prompts
         self._recorder = PrometheusRecorder()
+        # One per process, so the allowance is per replica. See the class
+        # docstring: a shared limiter belongs with horizontal scaling.
+        self._limiter = TokenBucketLimiter(
+            per_minute=settings.security.rate_limit_per_minute,
+            burst=settings.security.rate_limit_burst,
+        )
 
     @property
     def settings(self) -> Settings:
@@ -169,9 +176,14 @@ class Container:
         return RetrievalPipeline(
             retriever=self.retriever,
             authorization=AuthorizationFilter(self._odoo),
-            assembler=ContextAssembler(),
+            assembler=ContextAssembler(redaction=self._settings.security.redact_secrets),
             recorder=self._recorder,
         )
+
+    @property
+    def limiter(self) -> TokenBucketLimiter:
+        """How often one user may ask. Keyed on the context token."""
+        return self._limiter
 
     @property
     def recorder(self) -> Recorder:

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Request
@@ -82,6 +83,20 @@ async def ask(request: Request, body: AskRequest) -> StreamingResponse:
     put it in.
     """
     container: Container = request.app.state.container
+
+    # Keyed on the context token, which names the user. Checked before anything
+    # is fetched: the point is to spend nothing on a request that will not be
+    # served, and a limit applied after retrieval would have already cost an
+    # authorization round-trip and a search.
+    decision = container.limiter.check(body.context_token, now=time.monotonic())
+    if not decision.allowed:
+        logger.info("rate limited", extra={"retry_after": round(decision.retry_after, 1)})
+        return _refused(
+            "You are asking faster than Atlas can answer. "
+            f"Try again in {max(int(decision.retry_after), 1)} seconds.",
+            retry_after=decision.retry_after,
+        )
+
     context = UserContext(
         token=body.context_token,
         # From the ASGI scope, which is where the middleware puts it. Reading
@@ -129,6 +144,24 @@ async def _events(
         # at all, and the client cannot tell that from a network drop.
         logger.exception("unhandled failure while answering", extra={"trace_id": context.trace_id})
         yield _encode(AnswerEvent.error("The answer could not be completed."))
+
+
+def _refused(message: str, *, retry_after: float) -> StreamingResponse:
+    """A refusal the client parses exactly like any other stream.
+
+    Still 200 with an ``error`` event rather than a 429. The panel reads events;
+    giving it a second failure shape to handle would mean two code paths where
+    one will do. ``Retry-After`` is set anyway, so a proxy or a script sees the
+    conventional signal.
+    """
+    return StreamingResponse(
+        iter([_encode(AnswerEvent.error(message))]),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Retry-After": str(max(int(retry_after), 1)),
+        },
+    )
 
 
 def _cost(model: str, usage: TokenUsage) -> float:

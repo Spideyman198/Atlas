@@ -125,6 +125,7 @@ test-all: ## Run every test tier with the coverage gate (needs PostgreSQL up)
 # a passing result means "installs cleanly and passes", never "still passes on a
 # database someone has been poking at".
 ODOO_TEST_DB := odoo_atlas_test
+BENCH_DB := atlas_bench
 
 .PHONY: test-odoo
 test-odoo: ## Install the addon on a throwaway database and run its test suite
@@ -148,6 +149,22 @@ eval: ## Score retrieval against the golden set and fail on a regression
 .PHONY: eval-live
 eval-live: ## Score the golden set against the configured provider and corpus
 	$(COMPOSE) exec atlas-api python -m atlas.interfaces.evaluate --live
+
+# Needs a database it may create and drop tables in — never the corpus. Not part
+# of `check`: a sweep takes minutes and its numbers are hardware-dependent, so it
+# informs decisions rather than gating them.
+ROWS ?= 20000
+.PHONY: bench
+bench: ## Sweep HNSW parameters and report recall, latency and query plans
+	$(COMPOSE) up --detach postgres
+	$(COMPOSE) exec -T postgres psql -U $${POSTGRES_USER:-odoo} -d postgres \
+	  -c 'SELECT 1 FROM pg_database WHERE datname = $(BENCH_DB)' | grep -q 1 || \
+	  $(COMPOSE) exec -T postgres createdb -U $${POSTGRES_USER:-odoo} $(BENCH_DB)
+	$(COMPOSE) exec -T postgres psql -U $${POSTGRES_USER:-odoo} -d $(BENCH_DB) \
+	  -c 'CREATE EXTENSION IF NOT EXISTS vector'
+	$(COMPOSE) --profile tools run --rm \
+	  -e ATLAS_BENCH_DATABASE_URL=postgresql://$${POSTGRES_USER:-odoo}:$${POSTGRES_PASSWORD:-odoo_dev_password}@postgres:5432/$(BENCH_DB) \
+	  atlas-tools python -m atlas.interfaces.benchmark --rows $(ROWS)
 
 .PHONY: migrate
 migrate: ## Apply Alembic migrations to the Atlas database

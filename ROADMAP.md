@@ -19,7 +19,7 @@ can be reviewed on its own; none depends on a later milestone to make sense.
 | M10 | Orchestration and answer synthesis | Done |
 | M11 | Odoo chat UI | Done |
 | M12 | Evaluation and observability | Done |
-| M13 | Security hardening and performance | Planned |
+| M13 | Security hardening and performance | Done |
 | M14 | CI/CD, release engineering and documentation | Planned |
 | M15 | 1.0.0 | Planned |
 
@@ -311,6 +311,8 @@ making a floor unreachable and asserting the run exits non-zero.
 
 ## M13 — Security hardening and performance
 
+Status: done.
+
 - PII detection and redaction before context enters a prompt
 - Prompt-injection defences for ingested content; output validation
 - Per-user rate limiting; secrets handling review
@@ -319,7 +321,10 @@ making a floor unreachable and asserting the run exits non-zero.
 - Threat model
 
 Acceptance: measured p50 and p95 latency and recall numbers replace the estimates
-currently in the docs.
+currently in the docs. `make bench` produces them; `docs/performance.md` records
+what each number is worth. The headline result changed the code: a filtered dense
+search was taking 126.95 ms because the planner would not use the vector index,
+and now takes 3.94 ms and returns complete results.
 
 ## M14 — CI/CD, release engineering and documentation
 

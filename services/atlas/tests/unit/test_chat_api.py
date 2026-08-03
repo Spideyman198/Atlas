@@ -20,6 +20,7 @@ from atlas.config.container import Container
 from atlas.domain.authorization import UserContext
 from atlas.domain.errors import AuthorizationError, DependencyUnavailableError
 from atlas.domain.orchestration import Answer, AnswerEvent, AnswerRequest, Intent
+from atlas.domain.rate_limit import TokenBucketLimiter
 from atlas.domain.retrieval import Citation
 from atlas.interfaces.http.chat import router
 from atlas.interfaces.http.errors import register_exception_handlers
@@ -55,12 +56,22 @@ class StubAnswers:
             raise self._failure
 
 
-def client(answers: StubAnswers) -> TestClient:
+def client(answers: StubAnswers, limiter: TokenBucketLimiter | None = None) -> TestClient:
     app = FastAPI()
     register_exception_handlers(app)
     app.add_middleware(TraceIdMiddleware)
     app.include_router(router)
-    app.state.container = cast(Container, type("C", (), {"answers": answers})())
+    app.state.container = cast(
+        Container,
+        type(
+            "C",
+            (),
+            # Generous by default: every test here is about the endpoint, not
+            # about the allowance, and a limiter tight enough to fire would make
+            # them fail in an order-dependent way.
+            {"answers": answers, "limiter": limiter or TokenBucketLimiter(burst=1000)},
+        )(),
+    )
     return TestClient(app)
 
 
@@ -276,3 +287,43 @@ class TestWhatReachesTheOrchestrator:
         ask(answers, conversation_id=17)
 
         assert answers.calls[0][1].conversation_id == 17
+
+
+class TestRateLimiting:
+    def test_a_caller_asking_too_fast_is_refused(self) -> None:
+        limiter = TokenBucketLimiter(per_minute=1, burst=1)
+        session = client(StubAnswers(), limiter)
+        body = {"question": "how many orders?", "context_token": "alice-token"}
+
+        assert session.post("/v1/chat", json=body).status_code == 200
+        refused = session.post("/v1/chat", json=body)
+
+        assert "event: error" in refused.text
+        assert "Retry-After" in refused.headers
+
+    def test_the_refusal_costs_nothing(self) -> None:
+        """Checked before anything is fetched.
+
+        A limit applied after retrieval would already have cost an
+        authorization round-trip and a search.
+        """
+        answers = StubAnswers()
+        limiter = TokenBucketLimiter(per_minute=1, burst=1)
+        session = client(answers, limiter)
+        body = {"question": "how many orders?", "context_token": "alice-token"}
+
+        session.post("/v1/chat", json=body)
+        session.post("/v1/chat", json=body)
+
+        assert len(answers.calls) == 1
+
+    def test_one_user_running_hot_does_not_block_another(self) -> None:
+        limiter = TokenBucketLimiter(per_minute=1, burst=1)
+        session = client(StubAnswers(), limiter)
+
+        session.post("/v1/chat", json={"question": "q?", "context_token": "alice-token"})
+        blocked = session.post("/v1/chat", json={"question": "q?", "context_token": "alice-token"})
+        other = session.post("/v1/chat", json={"question": "q?", "context_token": "bob-token"})
+
+        assert "event: error" in blocked.text
+        assert "event: done" in other.text

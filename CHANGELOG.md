@@ -10,6 +10,27 @@ keys — may change between milestones. Breaking changes are called out explicit
 
 ### Added
 
+Security hardening and performance (M13):
+
+- Redaction of credentials and regulated identifiers before anything crosses
+  into a prompt, and again over the generated answer. Payment cards are
+  Luhn-validated and IBANs mod-97 validated, which is what makes the rules
+  precise enough to leave enabled in an ERP full of long digit strings. Names,
+  emails, phone numbers and VAT numbers are deliberately kept — they are what
+  the questions are about. Documented in [docs/security.md](docs/security.md).
+- Output validation: an answer reproducing twenty consecutive words of the
+  system prompt is replaced with a refusal.
+- Per-user rate limiting, keyed on the context token rather than the address,
+  checked before anything is fetched.
+- A threat model, stating what is defended and what is not.
+- `make bench`: an HNSW parameter sweep reporting recall against exact search,
+  p50/p95 latency, build time, index size and `EXPLAIN (ANALYZE, BUFFERS)`
+  plans. Results in [docs/performance.md](docs/performance.md), replacing the
+  estimates that were in the data-architecture document.
+- `shm_size: 2gb` on the PostgreSQL container. A parallel HNSW build asks for
+  about a gigabyte of shared memory and Docker's 64 MB default fails with "No
+  space left on device", which is not a disk problem.
+
 Evaluation and observability (M12):
 
 - A golden question set and a fixture corpus, with `make eval` scoring
@@ -128,6 +149,15 @@ Retrieval engine (M8):
 
 ### Fixed
 
+- Filtered dense search was 32x slower than necessary and returned incomplete
+  results. With a company filter matching a third of the table the planner takes
+  a bitmap scan over `(company_id, visibility)` and sorts sixteen thousand rows
+  rather than walking the HNSW graph — 126.95 ms. `hnsw.iterative_scan` was
+  already configured and did nothing, because it governs an index scan that was
+  never chosen. Forcing the index without it returns 5.1 rows for a `LIMIT` of
+  8. Both are now set together, scoped to the dense search's own transaction so
+  the lexical search keeps the bitmap scan it needs: 3.94 ms p50, complete
+  results.
 - The LlamaIndex bridge dropped chunk metadata. Everything a chunk carried of
   its own — including `record_name`, which is what a citation is labelled
   with — was lost on the way through fusion, so citations fell back to a worse

@@ -27,6 +27,7 @@ from atlas.domain.authorization import UserContext
 from atlas.domain.chat import ToolCall, ToolDefinition, ToolResult
 from atlas.domain.errors import AtlasError, AuthorizationError, DependencyUnavailableError
 from atlas.domain.ports.odoo_gateway import OdooGateway
+from atlas.domain.redaction import redact
 
 logger = logging.getLogger(__name__)
 
@@ -98,8 +99,15 @@ def _render(payload: dict[str, object]) -> str:
 
     Truncation is announced. A silently shortened list reads to a model as the
     complete answer, and it will say so.
+
+    Redacted on the way out for the same reason retrieved context is: a note
+    field with an API key in it reaches a provider whether it arrived through
+    search or through a live read.
     """
-    rendered = json.dumps(payload, default=str, ensure_ascii=False)
+    cleaned = redact(json.dumps(payload, default=str, ensure_ascii=False))
+    if cleaned.redacted:
+        logger.info("redacted a tool result", extra={"redactions": cleaned.counts})
+    rendered = cleaned.text
     if len(rendered) <= MAX_RESULT_CHARS:
         return rendered
     return (
