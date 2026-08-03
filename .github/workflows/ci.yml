@@ -94,8 +94,18 @@ jobs:
       - name: Version consistency
         run: python scripts/check_versions.py
 
+      # GitHub resolves `uses:` at run time, so a version that does not exist is
+      # a red pipeline rather than a parse error. One shipped that way.
+      - name: Workflow action references
+        run: python scripts/check_workflows.py
+
       # Scans history, not just the working tree: a secret committed and then
       # removed is still in the objects and still leaked.
+      #
+      # `latest` rather than a pinned tag, deliberately: the value of a secret
+      # scanner is its rule set, and pinning one freezes the patterns it knows
+      # about. `.gitleaks.toml` holds the one exception, scoped to the redaction
+      # tests — the file whose purpose is to contain secret-shaped strings.
       - name: Secret scanning (gitleaks)
         run: |
           docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:latest             detect --source /repo --no-banner --redact --exit-code 1
@@ -232,7 +242,7 @@ jobs:
       # Scans the built image rather than the source: this catches CVEs in the
       # base image and the OS packages, which pip-audit cannot see.
       - name: Image vulnerabilities (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: odoo-atlas/atlas:ci
           format: table

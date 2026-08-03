@@ -33,6 +33,14 @@ CI/CD, release engineering and documentation (M14):
   verified command by command against a running stack.
 - [docs/api-reference.md](docs/api-reference.md): every endpoint on both sides
   of the boundary, with the authentication each uses.
+- `scripts/check_workflows.py`, which verifies that every `uses:` reference
+  resolves to a real action. GitHub resolves those at run time, so a version
+  that does not exist is a red pipeline rather than a parse error — one shipped
+  that way.
+- `.gitleaks.toml`, allowing the redaction tests to contain the secret-shaped
+  strings they exist to test against. Scoped to that one file rather than
+  disabling the rules, because switching off `private-key` repository-wide to
+  accommodate a fixture is how a real key gets committed later.
 
 Security hardening and performance (M13):
 

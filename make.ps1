@@ -203,6 +203,7 @@ switch ($Target) {
         Invoke-Checked ($Tools + @('python', 'scripts/audit_dependencies.py'))
         Invoke-Checked ($Tools + @('python', 'scripts/check_licences.py'))
         Invoke-Checked ($Tools + @('python', 'scripts/check_versions.py'))
+        Invoke-Checked ($Tools + @('python', 'scripts/check_workflows.py'))
     }
 
     'check' {

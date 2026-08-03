@@ -185,6 +185,7 @@ audit: ## Check dependencies for known vulnerabilities and licence conflicts
 	$(TOOLS) python scripts/audit_dependencies.py
 	$(TOOLS) python scripts/check_licences.py
 	$(TOOLS) python scripts/check_versions.py
+	$(TOOLS) python scripts/check_workflows.py
 
 .PHONY: migrate
 migrate: ## Apply Alembic migrations to the Atlas database

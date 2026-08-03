@@ -1,0 +1,25 @@
+# gitleaks configuration.
+#
+# The default rules, plus one narrow exception.
+#
+# `tests/unit/test_redaction.py` exists to prove that Atlas strips credentials
+# out of retrieved records before they reach a model provider. To test a
+# detector you need strings the detector fires on, so the file contains a fake
+# GitLab token, a fake PEM block and a `secret: …` line — and gitleaks correctly
+# reports all three.
+#
+# The exception is scoped to that one path rather than to the rules, because
+# switching off `private-key` repository-wide to accommodate a test fixture is
+# how a real key gets committed later. The trade is that a genuine secret pasted
+# into that file would be missed; it is the one file in the repository whose
+# entire purpose is to hold secret-shaped strings, and a reviewer reading a diff
+# to it is already looking at credentials.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fixtures for the redaction tests, which must look like real credentials"
+paths = [
+  '''services/atlas/tests/unit/test_redaction\.py''',
+]
