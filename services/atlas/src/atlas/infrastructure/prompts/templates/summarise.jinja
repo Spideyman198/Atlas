@@ -1,0 +1,23 @@
+Summarise the conversation below so it can stand in for the original turns when
+the conversation continues.
+
+Keep what a later question might depend on:
+
+- What the person is working on, and any constraint they stated
+- Specific records already discussed, by name and reference
+- Figures and dates already established, exactly as given
+- Anything you were asked and could not answer, and why
+
+Drop pleasantries, restatements, and your own explanations of how you found
+things. Do not add anything that is not in the turns below, and do not resolve
+anything that was left open.
+
+Write it as notes, in the third person, under 200 words.
+
+<atlas:context>
+{% for turn in turns %}
+Q: {{ turn.question }}
+A: {{ turn.answer }}
+
+{% endfor %}
+</atlas:context>

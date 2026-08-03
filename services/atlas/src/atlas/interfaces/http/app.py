@@ -32,6 +32,7 @@ from atlas.config.container import Container
 from atlas.config.logging import configure_logging
 from atlas.config.settings import get_settings
 from atlas.domain.errors import AtlasError
+from atlas.interfaces.http.chat import router as chat_router
 from atlas.interfaces.http.errors import register_exception_handlers
 from atlas.interfaces.http.ingest import router as ingest_router
 from atlas.interfaces.http.middleware import TraceIdMiddleware
@@ -194,6 +195,7 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(router)
     app.include_router(ingest_router)
+    app.include_router(chat_router)
     return app
 
 

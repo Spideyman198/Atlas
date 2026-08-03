@@ -98,6 +98,11 @@ ignore = [
     # domain objects is precisely what an adapter is for, so the boundary is
     # where `Any` belongs.
     "ANN401",
+    # An adapter implements somebody else's interface and does not get to choose
+    # its signature. Several of ours exist precisely to *refuse* a call, and a
+    # refusal that read its arguments first would be stranger than one that
+    # does not.
+    "ARG002",
 ]
 # The source templates render raw ERP field values, which arrive as whatever
 # Odoo felt like sending: a string, a float, `False` for "unset", or a
@@ -143,6 +148,9 @@ docstring-code-format = true
 python_version = "3.12"
 mypy_path = "services/atlas/src"
 files = ["services/atlas/src", "services/atlas/tests"]
+# Deliberately-wrong code, kept so a test can prove the type checker rejects it.
+# See tests/unit/test_authorization_is_structural.py.
+exclude = ["services/atlas/tests/fixtures/typing/"]
 strict = true
 warn_unreachable = true
 show_error_codes = true

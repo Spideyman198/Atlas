@@ -102,6 +102,7 @@ def test_openapi_schema_is_generated() -> None:
         "/readyz",
         "/v1/ingest/sync",
         "/v1/ingest/sources",
+        "/v1/chat",
     }
 
 

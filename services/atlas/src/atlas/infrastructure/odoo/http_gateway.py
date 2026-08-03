@@ -21,6 +21,7 @@ from typing import Any, Final, Self
 import httpx
 
 from atlas.domain.authorization import UserContext
+from atlas.domain.chat import ToolDefinition
 from atlas.domain.errors import (
     AuthorizationError,
     DependencyUnavailableError,
@@ -34,6 +35,7 @@ STATUS_PATH: Final = "/atlas/api/status"
 AUTHORIZE_PATH: Final = "/atlas/api/authorize"
 RECORDS_PATH: Final = "/atlas/api/records"
 TOOL_PATH: Final = "/atlas/api/tool/execute"
+CATALOG_PATH: Final = "/atlas/api/tool/catalog"
 
 #: Odoo resolves a session-less request's database from this header. Without it
 #: a server hosting more than one database cannot route the call at all.
@@ -118,6 +120,22 @@ class OdooHttpGateway:
             message = "Odoo returned no 'records' list"
             raise DependencyUnavailableError(message)
         return [row for row in rows if isinstance(row, dict)]
+
+    async def tool_catalog(self, context: UserContext) -> list[ToolDefinition]:
+        body = await self._post(CATALOG_PATH, self._body(context))
+        entries = body.get("tools")
+        if not isinstance(entries, list):
+            message = "Odoo returned no 'tools' list"
+            raise DependencyUnavailableError(message)
+        return [
+            ToolDefinition(
+                name=str(entry["name"]),
+                description=str(entry.get("description") or ""),
+                parameters=dict(entry.get("parameters") or {}),
+            )
+            for entry in entries
+            if isinstance(entry, dict) and entry.get("name")
+        ]
 
     async def execute_tool(
         self,
@@ -207,11 +225,30 @@ class OdooHttpGateway:
             message = f"Odoo has nothing at {path}"
             raise NotFoundError(message, context=detail)
         if status < HTTPStatus.INTERNAL_SERVER_ERROR:
-            message = f"Odoo rejected the request to {path}"
+            # Odoo's own words, when it gave any. A tool call rejected for a bad
+            # argument is corrected by the model far more reliably when it is
+            # told which argument and what was allowed instead.
+            reason = _reason(response)
+            message = f"Odoo rejected the request to {path}" + (f": {reason}" if reason else "")
             raise ValidationError(message, context=detail)
 
         message = f"Odoo failed on {path} with {status}"
         raise DependencyUnavailableError(message, context=detail)
+
+
+def _reason(response: httpx.Response) -> str:
+    """Pull Odoo's explanation out of an error body, if it left one."""
+    try:
+        body = response.json()
+    except ValueError:
+        return ""
+    if not isinstance(body, dict):
+        return ""
+    for key in ("message", "detail", "error"):
+        value = body.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return ""
 
 
 def _int_ids(values: Any) -> list[int]:

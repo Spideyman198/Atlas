@@ -20,6 +20,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Protocol, runtime_checkable
 
 from atlas.domain.authorization import UserContext
+from atlas.domain.chat import ToolDefinition
 
 
 @runtime_checkable
@@ -67,6 +68,16 @@ class OdooGateway(Protocol):
         Records they may not see are absent from the result rather than reported
         as denied. The caller already knows what it asked for; telling it which
         ids were refused would leak the existence of records it cannot read.
+        """
+        ...
+
+    async def tool_catalog(self, context: UserContext) -> list[ToolDefinition]:
+        """The tools this Odoo can offer the acting user.
+
+        Fetched rather than declared here. The definitions live beside the
+        implementations in the addon, so there is one description of each tool
+        instead of two that drift — and a database without `sale` installed
+        simply offers fewer, rather than offering a tool that always fails.
         """
         ...
 

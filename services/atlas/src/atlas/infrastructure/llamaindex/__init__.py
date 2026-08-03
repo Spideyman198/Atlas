@@ -13,6 +13,18 @@ readers. Never transport, never storage. The vendor path and the schema stay
 ours, which is the whole point of the inversion described in ADR-0003 §3.
 """
 
+from atlas.infrastructure.llamaindex.bridges import (
+    AtlasLlamaEmbedding,
+    AtlasLlamaLLM,
+    AtlasLlamaVectorStore,
+)
 from atlas.infrastructure.llamaindex.loaders import LlamaIndexDocumentLoader
+from atlas.infrastructure.llamaindex.retriever import LlamaIndexHybridRetriever
 
-__all__ = ["LlamaIndexDocumentLoader"]
+__all__ = [
+    "AtlasLlamaEmbedding",
+    "AtlasLlamaLLM",
+    "AtlasLlamaVectorStore",
+    "LlamaIndexDocumentLoader",
+    "LlamaIndexHybridRetriever",
+]

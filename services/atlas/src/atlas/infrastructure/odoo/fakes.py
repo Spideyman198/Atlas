@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from atlas.domain.authorization import UserContext
+from atlas.domain.chat import ToolDefinition
 from atlas.domain.errors import AuthorizationError, DependencyUnavailableError, NotFoundError
 from atlas.domain.ingestion import RecordBatch, SourceRecord
 
@@ -86,6 +87,18 @@ class FakeOdooGateway:
             {"id": record_id, **{name: rows[record_id].get(name) for name in wanted}}
             for record_id in ids
             if record_id in allowed and record_id in rows
+        ]
+
+    async def tool_catalog(self, context: UserContext) -> list[ToolDefinition]:
+        self._check_available()
+        self._allowed_for(context)
+        return [
+            ToolDefinition(
+                name=name,
+                description=f"the {name} tool",
+                parameters={"type": "object", "additionalProperties": False, "properties": {}},
+            )
+            for name in sorted(self._tools)
         ]
 
     async def execute_tool(
@@ -182,7 +195,7 @@ class FakeSourceReader:
             more=offset + page < len(selected),
         )
 
-    async def read_binary(self, source_key: str, record_id: int) -> bytes:  # noqa: ARG002
+    async def read_binary(self, source_key: str, record_id: int) -> bytes:
         return self._files.get(record_id, b"")
 
     async def available_sources(self) -> Mapping[str, bool]:

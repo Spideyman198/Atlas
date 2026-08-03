@@ -13,6 +13,17 @@ classic sign of an interface that has not been segregated.
 from atlas.domain.ports.chat import ChatProvider
 from atlas.domain.ports.embedding import EmbeddingProvider
 from atlas.domain.ports.odoo_gateway import OdooGateway
+from atlas.domain.ports.prompts import PromptLibrary, RenderedPrompt
+from atlas.domain.ports.retriever import Reranker, Retriever
 from atlas.domain.ports.vector_store import VectorStore
 
-__all__ = ["ChatProvider", "EmbeddingProvider", "OdooGateway", "VectorStore"]
+__all__ = [
+    "ChatProvider",
+    "EmbeddingProvider",
+    "OdooGateway",
+    "PromptLibrary",
+    "RenderedPrompt",
+    "Reranker",
+    "Retriever",
+    "VectorStore",
+]

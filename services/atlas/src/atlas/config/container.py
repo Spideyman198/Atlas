@@ -16,14 +16,21 @@ from typing import Self
 
 from psycopg_pool import AsyncConnectionPool
 
+from atlas.application.authorization import AuthorizationFilter
 from atlas.application.ingestion import SyncSource
+from atlas.application.memory import ConversationMemory
+from atlas.application.retrieval import ContextAssembler, RetrievalPipeline
+from atlas.application.synthesis import AnswerBudget, AnswerService
+from atlas.application.tools import ToolBox
 from atlas.config.providers import build_providers
 from atlas.config.settings import Settings, get_settings
 from atlas.domain.errors import ConfigurationError
 from atlas.domain.ports.chat import ChatProvider
 from atlas.domain.ports.embedding import EmbeddingProvider
+from atlas.domain.ports.prompts import PromptLibrary
+from atlas.domain.ports.retriever import Retriever
 from atlas.domain.ports.vector_store import VectorStore
-from atlas.infrastructure.llamaindex import LlamaIndexDocumentLoader
+from atlas.infrastructure.llamaindex import LlamaIndexDocumentLoader, LlamaIndexHybridRetriever
 from atlas.infrastructure.odoo import OdooHttpGateway, OdooHttpSourceReader
 from atlas.infrastructure.persistence import (
     PgEmbeddingCache,
@@ -32,6 +39,7 @@ from atlas.infrastructure.persistence import (
     PgVectorStore,
     register_vector,
 )
+from atlas.infrastructure.prompts import JinjaPromptLibrary
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +60,7 @@ class Container:
         odoo: OdooHttpGateway,
         source_reader: OdooHttpSourceReader,
         loader: LlamaIndexDocumentLoader,
+        prompts: PromptLibrary,
     ) -> None:
         self._settings = settings
         self._pool = pool
@@ -60,6 +69,7 @@ class Container:
         self._odoo = odoo
         self._source_reader = source_reader
         self._loader = loader
+        self._prompts = prompts
 
     @property
     def settings(self) -> Settings:
@@ -133,6 +143,68 @@ class Container:
         )
 
     @property
+    def retriever(self) -> Retriever:
+        """Hybrid retrieval over the corpus.
+
+        The chat provider is passed only so LlamaIndex cannot reach for a vendor
+        of its own; retrieval asks no language model anything
+        (``atlas.infrastructure.llamaindex.bridges``).
+        """
+        return LlamaIndexHybridRetriever(
+            store=self.vector_store,
+            embedder=self._embedding,
+            chat=self._chat,
+            mmr_lambda=self._settings.retrieval.mmr_lambda,
+        )
+
+    def retrieval_pipeline(self) -> RetrievalPipeline:
+        """Retrieve, authorize, assemble — wired to this container.
+
+        The authorization stage is not optional and takes no configuration that
+        could switch it off (ADR-0006).
+        """
+        return RetrievalPipeline(
+            retriever=self.retriever,
+            authorization=AuthorizationFilter(self._odoo),
+            assembler=ContextAssembler(),
+        )
+
+    @property
+    def prompts(self) -> PromptLibrary:
+        """The prompt templates, verified once per process.
+
+        Built eagerly in :meth:`create` rather than here: a missing template is
+        a deployment error, and finding it at startup beats finding it on the
+        first question somebody asks.
+        """
+        return self._prompts
+
+    @property
+    def tools(self) -> ToolBox:
+        """The typed tools, executed by Odoo as the acting user."""
+        return ToolBox(self._odoo)
+
+    @property
+    def answers(self) -> AnswerService:
+        """The orchestrator: route, gather, generate, resolve citations."""
+        return AnswerService(
+            chat=self._chat,
+            prompts=self._prompts,
+            retrieval=self.retrieval_pipeline(),
+            tools=self.tools,
+            memory=ConversationMemory(
+                chat=self._chat,
+                prompts=self._prompts,
+                budget=self._settings.chat.history_budget,
+            ),
+            budget=AnswerBudget(
+                retrieval_limit=self._settings.retrieval.limit,
+                token_budget=self._settings.retrieval.token_budget,
+                max_output_tokens=self._settings.chat.max_output_tokens,
+            ),
+        )
+
+    @property
     def odoo(self) -> OdooHttpGateway:
         """The authorization authority (ADR-0006).
 
@@ -164,6 +236,9 @@ class Container:
             chunk_size=resolved.ingestion.chunk_size,
             chunk_overlap=resolved.ingestion.chunk_overlap,
         )
+        # Verifies every template it declares. A prompt file that did not make
+        # it into the image fails here, not on the first question asked.
+        prompts = JinjaPromptLibrary()
 
         pool = AsyncConnectionPool(
             conninfo=database.url,
@@ -191,7 +266,7 @@ class Container:
                 "odoo_database": resolved.odoo.database,
             },
         )
-        return cls(resolved, pool, chat, embedding, odoo, source_reader, loader)
+        return cls(resolved, pool, chat, embedding, odoo, source_reader, loader, prompts)
 
     async def aclose(self) -> None:
         """Release every resource the container owns."""

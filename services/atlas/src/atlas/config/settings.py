@@ -76,6 +76,15 @@ class ChatSettings(BaseModel):
             "budget truncates mid-response rather than shortening the answer."
         ),
     )
+    history_budget: int = Field(
+        default=1500,
+        gt=0,
+        description=(
+            "Tokens of conversation history a prompt may carry before older "
+            "turns are summarised. Deliberately smaller than the retrieval "
+            "budget: history competes with the context that grounds the answer."
+        ),
+    )
 
 
 class EmbeddingSettings(BaseModel):
@@ -217,6 +226,41 @@ class IngestionSettings(BaseModel):
         return self
 
 
+class RetrievalSettings(BaseModel):
+    """How retrieval behaves. Every value here is a quality/cost trade."""
+
+    model_config = {"frozen": True}
+
+    limit: int = Field(
+        default=8,
+        gt=0,
+        description="Chunks offered to the prompt, after authorization.",
+    )
+    over_fetch: int = Field(
+        default=4,
+        gt=0,
+        description=(
+            "Candidates fetched per result wanted. Authorization discards an "
+            "unknown fraction of them, and the denial rate is not knowable in "
+            "advance (ADR-0006). M13 makes this adaptive."
+        ),
+    )
+    mmr_lambda: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Relevance weight in the diversity pass. 1.0 disables it and returns "
+            "pure relevance order, near-duplicates and all."
+        ),
+    )
+    token_budget: int = Field(
+        default=4000,
+        gt=0,
+        description="Tokens of context a single answer may be grounded on.",
+    )
+
+
 class Settings(BaseSettings):
     """Engine configuration, sourced from ``ATLAS_*`` environment variables.
 
@@ -246,6 +290,7 @@ class Settings(BaseSettings):
     embedding: EmbeddingSettings = EmbeddingSettings()
     odoo: OdooSettings = OdooSettings()
     ingestion: IngestionSettings = IngestionSettings()
+    retrieval: RetrievalSettings = RetrievalSettings()
 
     @property
     def is_production(self) -> bool:

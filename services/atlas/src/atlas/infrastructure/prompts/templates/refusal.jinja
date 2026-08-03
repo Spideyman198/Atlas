@@ -1,0 +1,13 @@
+{% if kind == "write" %}
+I can only read data in Odoo — I can't create, change or delete anything. You'll
+need to make that change in Odoo directly.
+{% elif kind == "empty" %}
+I didn't catch a question there. Ask me about your customers, orders, invoices,
+stock or documents and I'll look it up.
+{% else %}
+I don't have information on that. Nothing in the documents I can see covers it,
+and there's no record I can read that answers it.
+
+If you expected there to be, it may not have been indexed yet, or it may be
+something your account doesn't have access to.
+{% endif %}

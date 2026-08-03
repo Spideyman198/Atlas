@@ -32,6 +32,13 @@ class InMemoryVectorStore:
         self.chunks: dict[str, list[ChunkInput]] = {}
         #: Every upsert, so a test can assert what was written and when.
         self.writes: list[str] = []
+        # Ids are handed out the way PostgreSQL hands them out: unique across
+        # the whole store, never per document. Reusing an ordinal here made
+        # every chunk look like chunk 0, and LlamaIndex — which identifies
+        # nodes by id — silently collapsed a result set of three into one.
+        self._chunk_ids: dict[str, list[int]] = {}
+        self._document_ids: dict[str, int] = {}
+        self._next_id = 1
 
     async def document_exists(self, source_hash: str) -> bool:
         return source_hash in self.documents
@@ -51,11 +58,20 @@ class InMemoryVectorStore:
             for source_hash in stale:
                 del self.documents[source_hash]
                 self.chunks.pop(source_hash, None)
+                self._chunk_ids.pop(source_hash, None)
+                self._document_ids.pop(source_hash, None)
 
         self.documents[document.source_hash] = document
         self.chunks[document.source_hash] = list(chunks)
+        self._document_ids.setdefault(document.source_hash, self._take_id())
+        self._chunk_ids[document.source_hash] = [self._take_id() for _ in chunks]
         self.writes.append(document.source_hash)
         return len(chunks)
+
+    def _take_id(self) -> int:
+        identifier = self._next_id
+        self._next_id += 1
+        return identifier
 
     async def delete_record(self, res_model: str, res_id: int) -> int:
         doomed = [
@@ -66,6 +82,8 @@ class InMemoryVectorStore:
         for source_hash in doomed:
             del self.documents[source_hash]
             self.chunks.pop(source_hash, None)
+            self._chunk_ids.pop(source_hash, None)
+            self._document_ids.pop(source_hash, None)
         return len(doomed)
 
     async def search_dense(
@@ -83,7 +101,7 @@ class InMemoryVectorStore:
         ]
         scored.sort(key=lambda row: row[0], reverse=True)
         return [
-            _candidate(self.documents[source_hash], chunk, ordinal, score)
+            self._candidate(source_hash, chunk, ordinal, score)
             for score, source_hash, ordinal, chunk in scored[:limit]
         ]
 
@@ -106,7 +124,7 @@ class InMemoryVectorStore:
                     scored.append((overlap / len(terms), source_hash, ordinal, chunk))
         scored.sort(key=lambda row: row[0], reverse=True)
         return [
-            _candidate(self.documents[source_hash], chunk, ordinal, score)
+            self._candidate(source_hash, chunk, ordinal, score)
             for score, source_hash, ordinal, chunk in scored[:limit]
         ]
 
@@ -115,6 +133,19 @@ class InMemoryVectorStore:
             if chunks:
                 return len(chunks[0].embedding)
         return 0
+
+    def _candidate(
+        self, source_hash: str, chunk: ChunkInput, ordinal: int, score: float
+    ) -> CandidateChunk:
+        """Build a candidate carrying the ids this store handed out."""
+        chunk_ids = self._chunk_ids.get(source_hash, [])
+        return _candidate_for(
+            self.documents[source_hash],
+            chunk,
+            chunk_id=chunk_ids[ordinal] if ordinal < len(chunk_ids) else 0,
+            document_id=self._document_ids.get(source_hash, 0),
+            score=score,
+        )
 
     def chunk_count(self, res_model: str, res_id: int) -> int:
         """How many chunks one record currently has. For assertions."""
@@ -191,10 +222,17 @@ def _passes(document: Document, filters: SearchFilter | None) -> bool:
     return not (filters.res_models and document.res_model not in filters.res_models)
 
 
-def _candidate(document: Document, chunk: ChunkInput, ordinal: int, score: float) -> CandidateChunk:
+def _candidate_for(
+    document: Document,
+    chunk: ChunkInput,
+    *,
+    chunk_id: int,
+    document_id: int,
+    score: float,
+) -> CandidateChunk:
     return CandidateChunk(
-        chunk_id=ordinal,
-        document_id=abs(hash(document.source_hash)) % 1_000_000,
+        chunk_id=chunk_id,
+        document_id=document_id,
         content=chunk.content,
         score=score,
         res_model=document.res_model,

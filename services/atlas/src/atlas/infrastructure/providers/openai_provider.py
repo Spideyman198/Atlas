@@ -191,7 +191,7 @@ class OpenAIEmbeddingProvider:
     async def embed(
         self,
         texts: Sequence[str],
-        purpose: EmbeddingPurpose = EmbeddingPurpose.DOCUMENT,  # noqa: ARG002
+        purpose: EmbeddingPurpose = EmbeddingPurpose.DOCUMENT,
     ) -> EmbeddingResult:
         # `purpose` is unused: OpenAI embeds documents and queries identically.
         # The parameter stays because the port requires it and Voyage honours it.
