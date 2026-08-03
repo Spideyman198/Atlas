@@ -107,6 +107,29 @@ class CandidateChunk:
 
 
 @dataclass(frozen=True, slots=True)
+class AuthorizedChunk:
+    """A chunk Odoo has confirmed the acting user may read, in this request.
+
+    The counterpart to :class:`CandidateChunk`, and the only kind of chunk the
+    prompt assembler accepts. The two types are the mechanism: there is no way
+    to put retrieval output into a prompt without going through the filter that
+    asks Odoo, because the shortcut does not type-check.
+
+    Nothing outside ``atlas.application.authorization`` should construct one.
+    Doing so asserts something no code here has checked.
+    """
+
+    chunk_id: int
+    document_id: int
+    content: str
+    score: float
+    res_model: str | None = None
+    res_id: int | None = None
+    external_ref: str | None = None
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
 class SearchFilter:
     """The cheap, non-authoritative narrowing applied inside the query.
 

@@ -183,7 +183,11 @@ jobs:
         #
         # The offline providers are selected explicitly. The composition root
         # builds providers at startup and refuses to start without a key, so a
-        # smoke test that only set a database URL would fail by design.
+        # smoke test that only set a database URL would fail by design. The Odoo
+        # service token is required for the same reason: Odoo authorises every
+        # retrieval, so an engine without one could never clear a candidate.
+        # Liveness is what is being checked here — there is no Odoo in this job,
+        # and readiness would correctly report that.
         run: |
           docker run --detach --name atlas-ci \
             --env ATLAS_DATABASE__URL=postgresql://atlas:atlas@127.0.0.1:5432/atlas \
@@ -191,6 +195,7 @@ jobs:
             --env ATLAS_CHAT__MODEL=fake-model \
             --env ATLAS_EMBEDDING__VENDOR=hash \
             --env ATLAS_EMBEDDING__MODEL=hash-embedding-v1 \
+            --env ATLAS_ODOO__SERVICE_TOKEN=smoke-test-token \
             --publish 8000:8000 odoo-atlas/atlas:ci
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8000/healthz; then

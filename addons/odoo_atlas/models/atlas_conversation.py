@@ -1,4 +1,5 @@
 from odoo import api, fields, models
+from odoo.addons.odoo_atlas.services import context_token, engine
 from odoo.addons.odoo_atlas.text import summarise
 from odoo.exceptions import UserError
 
@@ -102,6 +103,19 @@ class AtlasConversation(models.Model):
             if title and len(questions) == 1:
                 values["name"] = title
         self.write(values)
+
+    def _atlas_context_token(self):
+        """Mint the token the engine will present when acting for this owner.
+
+        Internal, and not reachable over RPC: the token is minted server-side
+        immediately before the addon calls the engine, and travels only on that
+        call. Nothing in the browser ever sees one.
+        """
+        self.ensure_one()
+        return context_token.mint(
+            self.env(user=self.user_id),
+            ttl_seconds=engine.context_token_ttl(),
+        )
 
     def action_set_archived(self):
         self.write({"state": "archived"})

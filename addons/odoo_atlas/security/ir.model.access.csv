@@ -5,3 +5,8 @@ access_atlas_message_user,atlas.message user,model_atlas_message,group_atlas_use
 access_atlas_message_manager,atlas.message manager,model_atlas_message,group_atlas_manager,1,1,1,1
 access_atlas_message_citation_user,atlas.message.citation user,model_atlas_message_citation,group_atlas_user,1,1,1,1
 access_atlas_message_citation_manager,atlas.message.citation manager,model_atlas_message_citation,group_atlas_manager,1,1,1,1
+access_atlas_access_log_user,atlas.access.log user,model_atlas_access_log,group_atlas_user,1,0,1,0
+access_atlas_access_log_manager,atlas.access.log manager,model_atlas_access_log,group_atlas_manager,1,0,0,1
+access_atlas_ingest_source_user,atlas.ingest.source user,model_atlas_ingest_source,group_atlas_user,1,0,0,0
+access_atlas_ingest_source_manager,atlas.ingest.source manager,model_atlas_ingest_source,group_atlas_manager,1,1,1,1
+access_atlas_ingest_wizard_manager,atlas.ingest.wizard manager,model_atlas_ingest_wizard,group_atlas_manager,1,1,1,1

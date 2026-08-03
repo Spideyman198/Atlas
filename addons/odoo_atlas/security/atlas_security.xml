@@ -23,6 +23,24 @@
         <field name="user_ids" eval="[(4, ref('base.user_admin'))]"/>
     </record>
 
+    <!--
+        The account ingestion reads as. It is deliberately not implied by, and
+        does not imply, the user groups above: indexing and asking questions are
+        different jobs, and the account that does the first has no business
+        holding a conversation.
+
+        Membership is what designates the integration user; ATLAS_INGEST_UID
+        names which member. What ends up in the index is then decided by Odoo's
+        own access rules for that account, so granting it less grants Atlas
+        less — there is no sudo() anywhere on that path.
+    -->
+    <record id="group_atlas_ingest" model="res.groups">
+        <field name="name">Integration: Indexing</field>
+        <field name="sequence">30</field>
+        <field name="privilege_id" ref="res_groups_privilege_atlas"/>
+        <field name="comment">Read records for the Atlas index. Not a person's group.</field>
+    </record>
+
     <data noupdate="1">
 
         <!--
@@ -55,6 +73,19 @@
         </record>
 
         <!--
+            The access log is append-only: no group has write access to it at
+            all (security/ir.model.access.csv). A user may read what was asked
+            on their behalf and may add to it — the controller writes a row as
+            them, without sudo — but cannot change or remove one afterwards.
+        -->
+        <record id="atlas_access_log_rule_own" model="ir.rule">
+            <field name="name">atlas.access.log: own entries only</field>
+            <field name="model_id" ref="model_atlas_access_log"/>
+            <field name="groups" eval="[(4, ref('group_atlas_user'))]"/>
+            <field name="domain_force">[('user_id', '=', user.id)]</field>
+        </record>
+
+        <!--
             Administrators see everything the multi-company rules below still
             allow. Rules attached to different groups are ORed, so a manager —
             who is also an Atlas user — is not narrowed by the ownership rules.
@@ -80,6 +111,13 @@
             <field name="domain_force">[(1, '=', 1)]</field>
         </record>
 
+        <record id="atlas_access_log_rule_manager" model="ir.rule">
+            <field name="name">atlas.access.log: administrators see all</field>
+            <field name="model_id" ref="model_atlas_access_log"/>
+            <field name="groups" eval="[(4, ref('group_atlas_manager'))]"/>
+            <field name="domain_force">[(1, '=', 1)]</field>
+        </record>
+
         <!--
             Multi-company. These carry no group, which makes them global: Odoo
             ANDs them with whatever the group rules above allow, so they bind
@@ -100,6 +138,12 @@
         <record id="atlas_message_citation_rule_company" model="ir.rule">
             <field name="name">atlas.message.citation: multi-company</field>
             <field name="model_id" ref="model_atlas_message_citation"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+
+        <record id="atlas_access_log_rule_company" model="ir.rule">
+            <field name="name">atlas.access.log: multi-company</field>
+            <field name="model_id" ref="model_atlas_access_log"/>
             <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         </record>
 

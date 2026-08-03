@@ -157,7 +157,10 @@ docs/                 ADRs and architecture documentation
 | [Architecture overview](docs/architecture/01-overview.md) | Components, layering, repository layout, known limits |
 | [Data architecture](docs/architecture/02-data-architecture.md) | Schema, indexes, performance, migration policy |
 | [Request lifecycle](docs/architecture/03-request-lifecycle.md) | Query, ingestion and failure paths |
-| [Decision records](docs/adr/README.md) | Seven decisions with the alternatives that were rejected |
+| [Callback API](docs/api.md) | How the engine asks Odoo what a user may see |
+| [Ingestion](docs/ingestion.md) | How ERP records become searchable text, and what it costs |
+| [Decision records](docs/adr/README.md) | Eight decisions with the alternatives that were rejected |
+| [Developer guide](docs/developer-guide.md) | Layers, configuration, errors, testing |
 | [Installation](docs/installation.md) | Setup and troubleshooting |
 | [Contributing](CONTRIBUTING.md) | Workflow, standards, commit conventions |
 | [Roadmap](ROADMAP.md) | Planned work |

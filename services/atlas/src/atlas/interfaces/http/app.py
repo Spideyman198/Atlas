@@ -31,7 +31,9 @@ from atlas import __version__
 from atlas.config.container import Container
 from atlas.config.logging import configure_logging
 from atlas.config.settings import get_settings
+from atlas.domain.errors import AtlasError
 from atlas.interfaces.http.errors import register_exception_handlers
+from atlas.interfaces.http.ingest import router as ingest_router
 from atlas.interfaces.http.middleware import TraceIdMiddleware
 
 logger = logging.getLogger(__name__)
@@ -102,10 +104,10 @@ async def readyz(request: Request) -> JSONResponse:
             checks["pgvector"] = _describe_pgvector(row[0] if row else None)
             checks["schema"] = await _describe_schema(container)
 
-    ready = (
-        checks.get("database") == "ok"
-        and checks.get("pgvector", "").startswith("ok")
-        and checks.get("schema", "").startswith("ok")
+        checks["odoo"] = await _describe_odoo(container)
+
+    ready = all(
+        checks.get(name, "").startswith("ok") for name in ("database", "pgvector", "schema", "odoo")
     )
     return JSONResponse(
         status_code=200 if ready else 503,
@@ -129,6 +131,25 @@ async def _describe_schema(container: Container) -> str:
     if actual != configured:
         return f"mismatch: schema is {actual}-d, embedding model is {configured}-d"
     return f"ok ({actual}-d)"
+
+
+async def _describe_odoo(container: Container | None) -> str:
+    """Check that Odoo is reachable, has the addon, and accepts our token.
+
+    Gating, not informational. Odoo is the authorization authority (ADR-0006):
+    with it unreachable the engine can retrieve candidates and clear none of
+    them, so every answer it could give would be a refusal. Reporting not-ready
+    keeps the instance out of rotation until that stops being true.
+    """
+    if container is None:
+        return "unavailable: container not initialised"
+    try:
+        status = await container.odoo.status()
+    except AtlasError as exc:
+        return f"unavailable: {exc.code}"
+    except Exception as exc:  # noqa: BLE001 - a readiness probe must never raise
+        return f"unavailable: {type(exc).__name__}"
+    return f"ok ({status.get('database', 'unknown database')})"
 
 
 def _describe_pgvector(extension_version: str | None) -> str:
@@ -172,6 +193,7 @@ def create_app() -> FastAPI:
     app.add_middleware(TraceIdMiddleware)
     register_exception_handlers(app)
     app.include_router(router)
+    app.include_router(ingest_router)
     return app
 
 

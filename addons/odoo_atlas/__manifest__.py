@@ -6,16 +6,18 @@ Odoo Atlas
 ==========
 
 The Odoo-side half of Atlas: conversations, messages and citations, the security
-model that scopes them to their owner, and the settings that point Odoo at the
-engine.
+model that scopes them to their owner, the audit log of what the engine asked
+for, and the endpoints it asks through.
 
 This addon is a thin adapter. It holds no AI code. Retrieval, orchestration and
 model calls live in the `atlas-api` engine, which runs as a separate process and
-never imports `odoo` (ADR-0002).
+never imports `odoo` (ADR-0002). What lives here is the authorization boundary:
+every read the engine causes runs as the user who asked, under Odoo's own record
+rules (ADR-0006).
 """,
     # Odoo series, then the project's own version. The project reaches 1.0.0 at
     # M15, at which point this becomes 19.0.1.0.0.
-    "version": "19.0.0.1.0",
+    "version": "19.0.0.2.0",
     "category": "Productivity",
     "author": "Odoo Atlas contributors",
     "website": "https://github.com/Spideyman198/Atlas",
@@ -30,8 +32,11 @@ never imports `odoo` (ADR-0002).
     "data": [
         "security/atlas_security.xml",
         "security/ir.model.access.csv",
+        "data/atlas_cron.xml",
         "views/atlas_conversation_views.xml",
         "views/atlas_message_views.xml",
+        "views/atlas_access_log_views.xml",
+        "views/atlas_ingest_views.xml",
         "views/res_config_settings_views.xml",
         "views/atlas_menus.xml",
     ],

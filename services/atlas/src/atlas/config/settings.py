@@ -10,9 +10,9 @@ and ``ATLAS_PROVIDER__CHAT_MODEL`` stay legible as the number of options grows.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -98,6 +98,125 @@ class EmbeddingSettings(BaseModel):
     timeout_seconds: float = Field(default=30.0, gt=0)
 
 
+class OdooSettings(BaseModel):
+    """How the engine reaches Odoo to authorize what it retrieved.
+
+    Odoo is the authorization authority (ADR-0006), so these are not optional
+    conveniences: without them the engine can retrieve candidates and can never
+    clear any of them for use.
+    """
+
+    model_config = {"frozen": True}
+
+    base_url: str = Field(
+        default="http://odoo:8069",
+        description="Odoo's origin, reachable from this process. An internal address.",
+    )
+    database: str = Field(
+        default="odoo",
+        description=(
+            "Which Odoo database to address. Sent as the X-Odoo-Database header, "
+            "because these calls deliberately carry no session."
+        ),
+    )
+    service_token: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Shared secret proving to Odoo that a call came from the engine. The "
+            "engine is given only this one: the key that signs user context tokens "
+            "stays on Odoo's side, so the engine cannot mint a context of its own."
+        ),
+    )
+    timeout_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        description=(
+            "Hard ceiling on one authorization call. Sits inside a multi-second "
+            "answer, so a slow Odoo must fail rather than consume the whole budget."
+        ),
+    )
+    max_ids_per_call: int = Field(
+        default=500,
+        gt=0,
+        description="Matches the addon's own limit, so an over-large batch fails here first.",
+    )
+    ingest_timeout_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        description=(
+            "Budget for one page of ingestion reads. Far longer than the "
+            "query-time timeout: a hundred orders with their lines is real work, "
+            "and nobody is waiting on it."
+        ),
+    )
+
+
+class IngestionSettings(BaseModel):
+    """How the cold path behaves.
+
+    Chunking parameters sit here rather than in the loader because they are a
+    retrieval strategy, not an implementation detail — ADR-0003 puts chunking
+    inside the adapter and exposes it through settings, which is this.
+    """
+
+    model_config = {"frozen": True}
+
+    page_size: int = Field(
+        default=100,
+        gt=0,
+        description="Records read from Odoo per round-trip.",
+    )
+    chunk_size: int = Field(
+        default=512,
+        gt=0,
+        description="Tokens per segment. Retrieval quality is mostly decided here.",
+    )
+    chunk_overlap: int = Field(
+        default=64,
+        ge=0,
+        description="Tokens neighbouring segments share, so a fact on a boundary survives.",
+    )
+    worker_poll_seconds: float = Field(
+        default=5.0,
+        gt=0,
+        description="How long a worker waits before asking for work again when the queue is empty.",
+    )
+    max_attempts: int = Field(
+        default=5,
+        ge=1,
+        description="Attempts before a job is declared dead and left for a person.",
+    )
+    retry_backoff_seconds: float = Field(
+        default=30.0,
+        gt=0,
+        description="Base of the exponential backoff between attempts.",
+    )
+    stale_job_seconds: float = Field(
+        default=900.0,
+        gt=0,
+        description=(
+            "How long a claimed job may sit untouched before it is assumed its "
+            "worker died and returned to the queue."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _overlap_fits_inside_a_chunk(self) -> Self:
+        """An overlap at least as large as the chunk never terminates.
+
+        Every segment would contain the whole of the previous one, so the
+        splitter makes no progress. Rejecting it at start-up is kinder than a
+        sync that runs until the disk fills.
+        """
+        if self.chunk_overlap >= self.chunk_size:
+            message = (
+                f"chunk_overlap ({self.chunk_overlap}) must be smaller than "
+                f"chunk_size ({self.chunk_size})"
+            )
+            raise ValueError(message)
+        return self
+
+
 class Settings(BaseSettings):
     """Engine configuration, sourced from ``ATLAS_*`` environment variables.
 
@@ -125,6 +244,8 @@ class Settings(BaseSettings):
     database: DatabaseSettings
     chat: ChatSettings = ChatSettings()
     embedding: EmbeddingSettings = EmbeddingSettings()
+    odoo: OdooSettings = OdooSettings()
+    ingestion: IngestionSettings = IngestionSettings()
 
     @property
     def is_production(self) -> bool:

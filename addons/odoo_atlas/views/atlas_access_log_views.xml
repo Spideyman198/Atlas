@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="atlas_access_log_view_search" model="ir.ui.view">
+        <field name="name">atlas.access.log.search</field>
+        <field name="model">atlas.access.log</field>
+        <field name="arch" type="xml">
+            <search string="Access Log">
+                <field name="user_id"/>
+                <field name="trace_id"/>
+                <field name="res_model"/>
+                <filter name="filter_denied" string="Something Denied"
+                        domain="[('denied_count', '&gt;', 0)]"/>
+                <separator/>
+                <filter name="filter_authorize" string="Authorize"
+                        domain="[('operation', '=', 'authorize')]"/>
+                <filter name="filter_records" string="Record Reads"
+                        domain="[('operation', '=', 'records')]"/>
+                <filter name="filter_tool" string="Tool Calls"
+                        domain="[('operation', '=', 'tool')]"/>
+                <group name="group_by">
+                    <filter name="group_by_user" string="Acting User"
+                            context="{'group_by': 'user_id'}"/>
+                    <filter name="group_by_model" string="Model"
+                            context="{'group_by': 'res_model'}"/>
+                    <filter name="group_by_operation" string="Operation"
+                            context="{'group_by': 'operation'}"/>
+                    <filter name="group_by_date" string="Date"
+                            context="{'group_by': 'create_date'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="atlas_access_log_view_list" model="ir.ui.view">
+        <field name="name">atlas.access.log.list</field>
+        <field name="model">atlas.access.log</field>
+        <field name="arch" type="xml">
+            <list string="Access Log" create="false" edit="false">
+                <field name="create_date" string="When"/>
+                <field name="user_id" widget="many2one_avatar_user"/>
+                <field name="operation"/>
+                <field name="res_model"/>
+                <field name="tool_name" optional="hide"/>
+                <field name="requested_count" sum="Requested"/>
+                <field name="granted_count" sum="Granted"/>
+                <field name="denied_count" sum="Denied" decoration-warning="denied_count &gt; 0"/>
+                <field name="duration_ms" optional="hide"/>
+                <field name="trace_id" optional="hide"/>
+                <field name="company_id" groups="base.group_multi_company" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="atlas_access_log_view_form" model="ir.ui.view">
+        <field name="name">atlas.access.log.form</field>
+        <field name="model">atlas.access.log</field>
+        <field name="arch" type="xml">
+            <form string="Access Log Entry" create="false" edit="false">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="user_id"/>
+                            <field name="operation"/>
+                            <field name="res_model"/>
+                            <field name="tool_name"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                        <group>
+                            <field name="requested_count"/>
+                            <field name="granted_count"/>
+                            <field name="denied_count"/>
+                            <field name="duration_ms"/>
+                            <field name="trace_id"/>
+                        </group>
+                    </group>
+                    <group string="Denied" invisible="denied_count == 0">
+                        <field name="denied_ids" nolabel="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="atlas_access_log_action" model="ir.actions.act_window">
+        <field name="name">Access Log</field>
+        <field name="res_model">atlas.access.log</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="atlas_access_log_view_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Nothing has been asked of Odoo yet
+            </p>
+            <p>
+                Every time the engine asks Odoo whether a user may read something, the
+                question and the answer are recorded here — including what was refused.
+            </p>
+        </field>
+    </record>
+
+</odoo>

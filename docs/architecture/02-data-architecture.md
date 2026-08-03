@@ -190,11 +190,16 @@ erDiagram
     ATLAS_ACCESS_LOG {
         int      id PK
         int      user_id FK
+        int      company_id FK
         char     trace_id
+        selection operation      "authorize records tool"
         char     res_model
+        char     tool_name
         int      requested_count
         int      granted_count
-        text     denied_ids
+        int      denied_count
+        text     denied_ids     "a sample, for diagnosis"
+        int      duration_ms
         datetime create_date
     }
 ```
@@ -212,7 +217,11 @@ citation still reads sensibly once its target is gone.
 
 **Why `atlas_access_log` is separate from `atlas_message`.** One message may trigger
 several authorization checks across several models, and the log must survive message
-deletion for audit purposes.
+deletion for audit purposes. It is append-only through the ORM — no group has write
+access — and each row is written *as the acting user*, taking the user and company
+from the environment rather than from the request, so a caller cannot attribute its
+own access to somebody else. Failing to write a row fails the request that caused it:
+an access nobody could audit is what the log exists to make impossible.
 
 **`user_id` and `company_id` are repeated on messages and citations.** They are copied
 from the conversation and stored, so that every record rule in the addon is a

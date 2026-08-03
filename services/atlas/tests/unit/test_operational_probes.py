@@ -6,11 +6,20 @@ point. If liveness needed any of those, it would not be a liveness probe.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from typing import Any, cast
+
 import pytest
 from fastapi.testclient import TestClient
 
 from atlas import __version__
-from atlas.interfaces.http.app import _describe_pgvector, _parse_version, create_app
+from atlas.domain.errors import AuthorizationError, DependencyUnavailableError
+from atlas.interfaces.http.app import (
+    _describe_odoo,
+    _describe_pgvector,
+    _parse_version,
+    create_app,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -45,13 +54,55 @@ def test_readyz_reports_not_ready_when_the_container_is_absent() -> None:
     assert "not initialised" in body["checks"]["database"]
 
 
+async def test_readiness_names_the_database_odoo_answered_for() -> None:
+    container = SimpleNamespace(odoo=_StubGateway({"database": "odoo"}))
+
+    assert await _describe_odoo(cast(Any, container)) == "ok (odoo)"
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected"),
+    [
+        (DependencyUnavailableError("odoo is down"), "unavailable: dependency_unavailable"),
+        (AuthorizationError("wrong token"), "unavailable: authorization_error"),
+        (RuntimeError("something else entirely"), "unavailable: RuntimeError"),
+    ],
+)
+async def test_readiness_reports_an_unusable_odoo_rather_than_raising(
+    failure: Exception, expected: str
+) -> None:
+    """Odoo is the authorization authority: unreachable means not ready.
+
+    A readiness probe that raised would be reported as a crash rather than as
+    the dependency outage it is.
+    """
+    container = SimpleNamespace(odoo=_StubGateway(failure))
+
+    assert await _describe_odoo(cast(Any, container)) == expected
+
+
+class _StubGateway:
+    def __init__(self, outcome: dict[str, str] | Exception) -> None:
+        self._outcome = outcome
+
+    async def status(self) -> dict[str, str]:
+        if isinstance(self._outcome, Exception):
+            raise self._outcome
+        return self._outcome
+
+
 def test_openapi_schema_is_generated() -> None:
     client = TestClient(create_app())
 
     response = client.get("/openapi.json")
 
     assert response.status_code == 200
-    assert set(response.json()["paths"]) == {"/healthz", "/readyz"}
+    assert set(response.json()["paths"]) == {
+        "/healthz",
+        "/readyz",
+        "/v1/ingest/sync",
+        "/v1/ingest/sources",
+    }
 
 
 @pytest.mark.parametrize(

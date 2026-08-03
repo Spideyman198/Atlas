@@ -118,6 +118,21 @@ class PgVectorStore:
                 row = await cursor.fetchone()
                 document_id = int(row[0])  # type: ignore[index]
 
+                # An edited record renders differently, so it hashes differently,
+                # so the INSERT above created a *new* row rather than updating
+                # the old one. Without this, the previous version's chunks would
+                # linger and the record would be retrievable twice — once as it
+                # is and once as it was. Same transaction as the insert, so a
+                # reader sees one version or the other and never both.
+                if document.res_model and document.res_id:
+                    await cursor.execute(
+                        """
+                        DELETE FROM documents
+                        WHERE res_model = %s AND res_id = %s AND id <> %s
+                        """,
+                        (document.res_model, document.res_id, document_id),
+                    )
+
                 # Replace rather than merge: an edit that shortens a document
                 # must not leave the tail of the previous version behind.
                 await cursor.execute("DELETE FROM chunks WHERE document_id = %s", (document_id,))

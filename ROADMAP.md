@@ -12,8 +12,8 @@ can be reviewed on its own; none depends on a later milestone to make sense.
 | M3b | Vendor adapters (Anthropic, OpenAI, Voyage) | Done |
 | M4 | Vector store and persistence | Done |
 | M5 | Odoo addon skeleton | Done |
-| M6 | Odoo gateway and authorization | Planned |
-| M7 | Ingestion pipeline | Planned |
+| M6 | Odoo gateway and authorization | Done |
+| M7 | Ingestion pipeline | Done |
 | M8 | Retrieval engine | Planned |
 | M9 | Structured query tools | Planned |
 | M10 | Orchestration and answer synthesis | Planned |
@@ -163,30 +163,59 @@ read another user's conversation, and Odoo's test runner passes.
 
 ## M6 — Odoo gateway and authorization
 
-- Addon controllers: `/atlas/api/authorize`, `/atlas/api/tool/execute`,
-  `/atlas/api/records`
-- Constant-time service-token auth plus signed short-lived user context tokens
-- `OdooGateway` port and HTTP adapter with authorization batched by model
-- `atlas.access.log` audit model and views
-- CI rule prohibiting `sudo()` in the Atlas request path
-- Graceful degradation when the engine is unreachable
-- `docs/api.md`
+Status: done.
+
+- Addon controllers: `/atlas/api/authorize`, `/atlas/api/records`,
+  `/atlas/api/tool/execute`, and `/atlas/api/status` for the readiness probe.
+  Every read runs as the acting user; archived records count as readable, since
+  archiving is not a permission
+- Constant-time service-token auth plus signed short-lived context tokens. Two
+  separate secrets: the engine holds the shared one and not the signing key, so
+  it can replay a context Odoo issued but cannot mint one. Both come from the
+  environment, never from `ir.config_parameter`
+- Verification re-reads the user, so revoking access takes effect on the next
+  call, and intersects the token's companies with what the user still has
+- `OdooGateway` port, HTTP adapter and in-memory fake, held together by a shared
+  contract suite; authorization batched by model
+- `AuthorizedChunk`: the filter is the only way to obtain one, so bypassing
+  stage 2 is a type error rather than a policy
+- `atlas.access.log`, append-only, written as the acting user, with views
+- The `sudo()` prohibition enforced by a test that scans the addon — no
+  allow-list and no exceptions
+- `/readyz` gains a gating `odoo` check; the addon's engine client has a hard
+  timeout and reports failure as a value
+- [`docs/api.md`](docs/api.md)
 
 Acceptance: an integration test shows a restricted user cannot retrieve a restricted
 record, and that an unreachable gateway fails closed.
 
 ## M7 — Ingestion pipeline
 
-- Source registry for products, partners, CRM leads, sale and purchase orders,
-  stock, invoices, `ir.attachment` PDFs and manual uploads
-- Per-source templates rendering records to retrievable text
-- Chunking through LlamaIndex node parsers behind the `DocumentLoader` port;
-  `llama-index-readers-file` for PDF and DOCX
-- Batch embedding with `embedding_cache` and a `source_hash` short-circuit
-- Postgres job queue using `FOR UPDATE SKIP LOCKED`, with backoff and a dead-letter
-  state
-- Incremental sync by `write_date` watermark, `ir.cron` trigger, `atlas reindex` CLI
-- Ingest-source configuration wizard in Odoo
+Status: done. See [docs/ingestion.md](docs/ingestion.md).
+
+- Eight sources — partners, products, attachments, CRM leads, sale and purchase
+  orders, invoices, stock — declared as data rather than eight renderers. A
+  source whose module is not installed reports itself unavailable instead of
+  failing a sync halfway through
+- Templates render labelled prose, with selection labels rather than keys and
+  order lines indexed alongside their order, because that is what makes a record
+  findable
+- LlamaIndex arrives, confined to `atlas.infrastructure.llamaindex`: sentence
+  splitting and the PDF and DOCX readers. Deleting it fails exactly one test file
+- `SourceReader`, `DocumentLoader`, `JobQueue`, `EmbeddingCache` and
+  `SourceState` ports, with in-memory doubles the M8 work can develop against
+- Content hash carrying record identity as well as text, so two records that
+  render identically cannot overwrite one another; attachments compared by the
+  checksum Odoo already holds, so an unchanged contract is never downloaded
+- Segment-level embedding cache keyed by `(content_hash, model)`
+- `ingest_jobs` claimed with `FOR UPDATE SKIP LOCKED`, exponential backoff, a
+  dead-letter state distinct from `failed`, and a stale sweep that does not
+  refund the attempt a crashed worker burned
+- `write_date` watermark that only moves forward; `ir.cron` trigger; the
+  `atlas` CLI (`sources`, `sync`, `reindex`, `worker`); the `atlas-worker`
+  service; an indexing wizard in Odoo
+- Ingestion reads as a dedicated integration user with its own group, so what it
+  may index is decided by Odoo's access rules and still no `sudo()`
 
 Acceptance: re-running a sync with no data changes performs zero embedding calls,
 and changing one record updates exactly its chunks, transactionally.

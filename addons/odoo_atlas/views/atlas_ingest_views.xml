@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="atlas_ingest_source_view_list" model="ir.ui.view">
+        <field name="name">atlas.ingest.source.list</field>
+        <field name="model">atlas.ingest.source</field>
+        <field name="arch" type="xml">
+            <list string="Ingest Sources" create="false" delete="false" editable="bottom">
+                <field name="sequence" widget="handle"/>
+                <field name="name" readonly="1"/>
+                <field name="source_key" readonly="1" optional="hide"/>
+                <field name="res_model" readonly="1"/>
+                <field name="requires_module" readonly="1" optional="hide"/>
+                <field name="available" readonly="1" widget="boolean_toggle"/>
+                <field name="active" string="Indexed" widget="boolean_toggle"
+                       readonly="not available"/>
+                <field name="last_queued" readonly="1" optional="show"/>
+                <field name="last_result" readonly="1" optional="hide"/>
+                <button name="action_sync_now" type="object" string="Sync"
+                        icon="fa-refresh" invisible="not active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="atlas_ingest_source_view_form" model="ir.ui.view">
+        <field name="name">atlas.ingest.source.form</field>
+        <field name="model">atlas.ingest.source</field>
+        <field name="arch" type="xml">
+            <form string="Ingest Source" create="false">
+                <header>
+                    <button name="action_sync_now" type="object" string="Sync Changes"
+                            class="btn-primary" invisible="not active"/>
+                    <button name="action_full_sync" type="object" string="Full Sync"
+                            invisible="not active"/>
+                    <button name="action_reindex" type="object" string="Re-embed Everything"
+                            confirm="This re-embeds every record in this source and is charged in full. Continue?"
+                            invisible="not active"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="name" readonly="1"/></h1>
+                    </div>
+                    <div class="alert alert-warning" role="alert" invisible="available">
+                        This source is not available on this database. Either the module
+                        (<field name="requires_module" readonly="1" class="oe_inline"/>) is not
+                        installed, or the Atlas integration user cannot read it.
+                    </div>
+                    <group>
+                        <group>
+                            <field name="source_key" readonly="1"/>
+                            <field name="res_model" readonly="1"/>
+                            <field name="requires_module" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="available" readonly="1"/>
+                            <field name="active" string="Indexed" readonly="not available"/>
+                            <field name="last_queued" readonly="1"/>
+                            <field name="last_result" readonly="1"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="atlas_ingest_source_action" model="ir.actions.act_window">
+        <field name="name">Ingest Sources</field>
+        <field name="res_model">atlas.ingest.source</field>
+        <field name="view_mode">list,form</field>
+        <field name="context">{'active_test': False}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No sources listed yet
+            </p>
+            <p>
+                Run <b>Configure Indexing</b> to read the list from the engine and choose
+                what Atlas should keep in its index.
+            </p>
+        </field>
+    </record>
+
+    <record id="atlas_ingest_wizard_view_form" model="ir.ui.view">
+        <field name="name">atlas.ingest.wizard.form</field>
+        <field name="model">atlas.ingest.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Configure Indexing">
+                <p>
+                    Choose what Atlas keeps in its index. Indexing reads records as the Atlas
+                    integration user, so a source can only contain what that account is allowed
+                    to see. Questions are still answered under the asking user's own rights.
+                </p>
+                <group>
+                    <field name="source_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                    <field name="kind"/>
+                </group>
+                <div class="text-muted" invisible="not unavailable_note">
+                    <field name="unavailable_note" readonly="1" nolabel="1"/>
+                </div>
+                <footer>
+                    <button name="action_start" type="object" string="Start Indexing"
+                            class="btn-primary"/>
+                    <button name="action_refresh" type="object" string="Refresh List"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="atlas_ingest_wizard_action" model="ir.actions.act_window">
+        <field name="name">Configure Indexing</field>
+        <field name="res_model">atlas.ingest.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+
+</odoo>

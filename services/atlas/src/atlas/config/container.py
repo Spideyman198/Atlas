@@ -16,12 +16,22 @@ from typing import Self
 
 from psycopg_pool import AsyncConnectionPool
 
+from atlas.application.ingestion import SyncSource
 from atlas.config.providers import build_providers
 from atlas.config.settings import Settings, get_settings
+from atlas.domain.errors import ConfigurationError
 from atlas.domain.ports.chat import ChatProvider
 from atlas.domain.ports.embedding import EmbeddingProvider
 from atlas.domain.ports.vector_store import VectorStore
-from atlas.infrastructure.persistence import PgVectorStore, register_vector
+from atlas.infrastructure.llamaindex import LlamaIndexDocumentLoader
+from atlas.infrastructure.odoo import OdooHttpGateway, OdooHttpSourceReader
+from atlas.infrastructure.persistence import (
+    PgEmbeddingCache,
+    PgJobQueue,
+    PgSourceState,
+    PgVectorStore,
+    register_vector,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,17 +43,23 @@ class Container:
     async context manager.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913, PLR0917 - the composition root holds what it builds
         self,
         settings: Settings,
         pool: AsyncConnectionPool,
         chat: ChatProvider,
         embedding: EmbeddingProvider,
+        odoo: OdooHttpGateway,
+        source_reader: OdooHttpSourceReader,
+        loader: LlamaIndexDocumentLoader,
     ) -> None:
         self._settings = settings
         self._pool = pool
         self._chat = chat
         self._embedding = embedding
+        self._odoo = odoo
+        self._source_reader = source_reader
+        self._loader = loader
 
     @property
     def settings(self) -> Settings:
@@ -70,6 +86,62 @@ class Container:
         """The corpus store, over the same pool."""
         return PgVectorStore(self._pool)
 
+    @property
+    def job_queue(self) -> PgJobQueue:
+        """The ingestion queue, over the same pool."""
+        ingestion = self._settings.ingestion
+        return PgJobQueue(
+            self._pool,
+            max_attempts=ingestion.max_attempts,
+            backoff_seconds=ingestion.retry_backoff_seconds,
+        )
+
+    @property
+    def source_state(self) -> PgSourceState:
+        """Per-source registration and watermarks."""
+        return PgSourceState(self._pool)
+
+    @property
+    def embedding_cache(self) -> PgEmbeddingCache:
+        """Vectors already paid for."""
+        return PgEmbeddingCache(self._pool)
+
+    @property
+    def source_reader(self) -> OdooHttpSourceReader:
+        """Reads Odoo records for indexing, as the integration user."""
+        return self._source_reader
+
+    @property
+    def document_loader(self) -> LlamaIndexDocumentLoader:
+        """Chunking and file extraction.
+
+        Built once and reused: the splitter loads a tokeniser, and doing that
+        per document would dominate the sync.
+        """
+        return self._loader
+
+    def sync_source(self) -> SyncSource:
+        """The ingestion use case, wired to this container's collaborators."""
+        return SyncSource(
+            reader=self._source_reader,
+            loader=self._loader,
+            embedder=self._embedding,
+            store=self.vector_store,
+            cache=self.embedding_cache,
+            state=self.source_state,
+            page_size=self._settings.ingestion.page_size,
+        )
+
+    @property
+    def odoo(self) -> OdooHttpGateway:
+        """The authorization authority (ADR-0006).
+
+        Typed as the concrete adapter rather than the port because readiness
+        calls :meth:`~OdooHttpGateway.status`, which acts for no user and is
+        therefore not part of what the application layer is allowed to do.
+        """
+        return self._odoo
+
     @classmethod
     async def create(cls, settings: Settings | None = None) -> Self:
         """Build the container and open its resources.
@@ -86,6 +158,12 @@ class Container:
         # mismatch should stop the process here rather than surface on the first
         # user request.
         chat, embedding = build_providers(resolved)
+        odoo = _build_odoo_gateway(resolved)
+        source_reader = _build_source_reader(resolved)
+        loader = LlamaIndexDocumentLoader(
+            chunk_size=resolved.ingestion.chunk_size,
+            chunk_overlap=resolved.ingestion.chunk_overlap,
+        )
 
         pool = AsyncConnectionPool(
             conninfo=database.url,
@@ -109,12 +187,16 @@ class Container:
                 "embedding_provider": embedding.name,
                 "embedding_model": embedding.model_id,
                 "embedding_dimensions": embedding.dimensions,
+                "odoo_base_url": resolved.odoo.base_url,
+                "odoo_database": resolved.odoo.database,
             },
         )
-        return cls(resolved, pool, chat, embedding)
+        return cls(resolved, pool, chat, embedding, odoo, source_reader, loader)
 
     async def aclose(self) -> None:
         """Release every resource the container owns."""
+        await self._odoo.aclose()
+        await self._source_reader.aclose()
         await self._pool.close()
         logger.info("container closed")
 
@@ -128,3 +210,42 @@ class Container:
         tb: TracebackType | None,
     ) -> None:
         await self.aclose()
+
+
+def _build_odoo_gateway(settings: Settings) -> OdooHttpGateway:
+    """Build the gateway, refusing to start without the shared secret.
+
+    A missing token is not a degraded mode. Odoo would refuse every call, so the
+    engine could retrieve candidates and never clear one — an outage that looks
+    like "the assistant knows nothing" rather than like a misconfiguration.
+    Failing here says which environment variable is missing instead.
+    """
+    odoo = settings.odoo
+    if odoo.service_token is None or not odoo.service_token.get_secret_value():
+        message = "ATLAS_ODOO__SERVICE_TOKEN is required: Odoo authorises every retrieval"
+        raise ConfigurationError(message)
+
+    return OdooHttpGateway(
+        base_url=odoo.base_url,
+        database=odoo.database,
+        service_token=odoo.service_token.get_secret_value(),
+        timeout_seconds=odoo.timeout_seconds,
+        max_ids_per_call=odoo.max_ids_per_call,
+    )
+
+
+def _build_source_reader(settings: Settings) -> OdooHttpSourceReader:
+    """Build the ingestion reader.
+
+    Shares the service token with the gateway but not the timeout: ingestion
+    reads pages of a hundred orders with their lines, and nobody is waiting on
+    it, so it gets a far longer budget than a query-time authorization call.
+    """
+    odoo = settings.odoo
+    token = odoo.service_token.get_secret_value() if odoo.service_token else ""
+    return OdooHttpSourceReader(
+        base_url=odoo.base_url,
+        database=odoo.database,
+        service_token=token,
+        timeout_seconds=odoo.ingest_timeout_seconds,
+    )

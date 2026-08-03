@@ -11,18 +11,38 @@
                      groups="odoo_atlas.group_atlas_manager">
                     <block title="Engine" name="atlas_engine">
                         <setting id="atlas_engine_url_setting" string="Engine URL"
-                                 help="Where Odoo reaches the Atlas engine.">
-                            <field name="atlas_engine_url" placeholder="http://atlas-api:8000"/>
-                        </setting>
-                        <setting id="atlas_service_token_setting" string="Service Token"
-                                 help="Shared secret authenticating Odoo to the engine and back.">
-                            <field name="atlas_service_token" password="True"
-                                   placeholder="Generate a long random string"/>
+                                 help="Set by ATLAS_ENGINE_URL in the Odoo server's environment.">
+                            <field name="atlas_engine_url"/>
+                            <div class="mt8">
+                                <button name="action_atlas_test_connection" type="object"
+                                        string="Test Connection" icon="oi-arrow-right"
+                                        class="btn-link"/>
+                            </div>
                         </setting>
                         <setting id="atlas_request_timeout_setting" string="Request Timeout"
-                                 help="How long Odoo waits for an answer before giving up.">
+                                 help="How long Odoo waits for an answer before giving up on the engine.">
                             <field name="atlas_request_timeout"/>
-                            <span class="ms-1">seconds</span>
+                            <span class="ms-1">seconds (ATLAS_ENGINE_TIMEOUT)</span>
+                        </setting>
+                    </block>
+                    <block title="Security" name="atlas_security">
+                        <setting id="atlas_secrets_setting" string="Secrets"
+                                 help="ATLAS_SERVICE_TOKEN authenticates the engine to Odoo. ATLAS_CONTEXT_SECRET signs the short-lived tokens naming the acting user, and is never shared with the engine.">
+                            <field name="atlas_secrets_state" class="oe_inline"
+                                   invisible="not atlas_secrets_ok"/>
+                            <field name="atlas_secrets_ok" invisible="1"/>
+                            <div class="text-danger" invisible="atlas_secrets_ok">
+                                <field name="atlas_secrets_state" nolabel="1" class="oe_inline"/>
+                                <div class="mt4">
+                                    Until both are set in the server's environment, every engine
+                                    call is refused.
+                                </div>
+                            </div>
+                        </setting>
+                        <setting id="atlas_context_token_ttl_setting" string="Context Token Lifetime"
+                                 help="How long a token naming the acting user stays valid. Shorter is safer; the addon mints a fresh one per request.">
+                            <field name="atlas_context_token_ttl"/>
+                            <span class="ms-1">seconds (ATLAS_CONTEXT_TOKEN_TTL)</span>
                         </setting>
                     </block>
                 </app>

@@ -10,6 +10,91 @@ keys — may change between milestones. Breaking changes are called out explicit
 
 ### Added
 
+Ingestion pipeline (M7):
+
+- Eight sources — partners, products, attachments, CRM leads, sale and purchase
+  orders, invoices, stock — declared as data in `atlas.domain.sources`. One
+  renderer walks all of them, so a field nobody thought to index is one line to
+  add. Documented in [docs/ingestion.md](docs/ingestion.md).
+- LlamaIndex arrives, confined to `atlas.infrastructure.llamaindex`: sentence
+  splitting plus PDF and DOCX readers. The containment is falsifiable — deleting
+  the dependency fails exactly one test file, and an `import-linter` contract
+  fails the build if it is imported anywhere else (ADR-0003).
+- `SourceReader`, `DocumentLoader`, `JobQueue`, `EmbeddingCache` and
+  `SourceState` ports, with in-memory doubles so retrieval work can be developed
+  and tested without PostgreSQL or an Odoo.
+- Re-running a sync with nothing changed makes no embedding calls: the content
+  hash is checked before the provider is called. Attachments are compared by the
+  checksum Odoo already holds, so an unchanged contract is never downloaded.
+- The hash carries record identity as well as content, so two records that
+  render identically — two contacts with the same name and nothing else filled
+  in — cannot collide on the unique index and overwrite one another.
+- Segment-level embedding cache keyed by `(content_hash, model)`. A changed
+  order re-embeds the line that changed, not the eleven that did not.
+- `ingest_jobs` claimed with `SELECT ... FOR UPDATE SKIP LOCKED`: a durable queue
+  several workers can drain with no broker. Exponential backoff, a `dead` state
+  deliberately distinct from `failed`, and a stale sweep that returns a crashed
+  worker's job without refunding the attempt it burned.
+- Incremental sync by `write_date` watermark, which only ever moves forward.
+- The `atlas` command line (`sources`, `sync`, `reindex`, `worker`), the
+  `atlas-worker` compose service, `POST /v1/ingest/sync`, an `ir.cron` trigger
+  and an indexing wizard in Odoo. Sources are off until somebody turns them on.
+- Ingestion reads as a dedicated integration user (`ATLAS_INGEST_UID`, holding
+  `odoo_atlas.group_atlas_ingest`) through its own endpoints. That account sees
+  more than any one person does, which is precisely why the query-time check
+  cannot be skipped — and it is still an ordinary Odoo account, with no `sudo()`.
+
+### Fixed
+
+- `PgVectorStore.upsert_document` now removes any other document for the same
+  record inside the same transaction. An edited record renders differently and so
+  hashes differently, which meant the previous version's chunks lingered and the
+  record was retrievable twice — once as it is and once as it was.
+
+Odoo gateway and authorization (M6):
+
+- The callback API the engine asks Odoo through: `/atlas/api/authorize`,
+  `/atlas/api/records`, `/atlas/api/tool/execute` and `/atlas/api/status`,
+  documented in [docs/api.md](docs/api.md). Every read runs as the acting user.
+- Two secrets doing two jobs. `ATLAS_SERVICE_TOKEN` proves a call came from the
+  engine; `ATLAS_CONTEXT_SECRET` signs the short-lived tokens naming the acting
+  user and is never given to the engine, so it can replay a context Odoo issued
+  but cannot mint one. An unset secret refuses every call.
+- Context tokens are re-checked against the database on every use, so
+  deactivating an account or removing its Atlas group takes effect on the next
+  call. The companies in a token are intersected with the ones the user still
+  has, so it cannot widen its own scope.
+- `OdooGateway` port, an httpx adapter and an in-memory fake, held to one shared
+  contract suite. Authorization is batched by model.
+- `AuthorizedChunk`, produced only by `AuthorizationFilter`. Skipping the
+  authorization step is a type error rather than a policy that could be
+  forgotten. Every failure — including exception types nobody anticipated —
+  collapses into a refusal and no chunks.
+- `atlas.access.log`: who acted, which model, how many ids were asked about,
+  granted and refused, the trace id and the duration. Append-only through the
+  ORM, written as the acting user, and failing to write one fails the request.
+- The `sudo()` prohibition from ADR-0006 enforced by a test that scans the
+  addon's source. No allow-list and no exceptions.
+- `/readyz` gains a gating `odoo` check: with Odoo unreachable the engine can
+  clear no candidates, so every answer it could give would be a refusal.
+- A *Test Connection* button on the settings page, and a hard timeout on the
+  addon's engine client, so an engine outage degrades the assistant and not Odoo.
+
+### Changed
+
+- Atlas configuration on the Odoo side moved from `ir.config_parameter` to the
+  server's environment (`ATLAS_ENGINE_URL`, `ATLAS_ENGINE_TIMEOUT`,
+  `ATLAS_CONTEXT_TOKEN_TTL`). Reading a config parameter needs system rights, and
+  the code that reads it runs as whichever user asked a question — so a parameter
+  would have forced a `sudo()` onto the request path. The settings page now
+  reports the configuration read-only instead of offering to overrule it. The
+  M5 `odoo_atlas.service_token` parameter is gone; set `ATLAS_SERVICE_TOKEN`
+  instead.
+- The engine refuses to start without `ATLAS_ODOO__SERVICE_TOKEN`. Odoo
+  authorises every retrieval, so an engine without one could retrieve candidates
+  and clear none of them — an outage that looks like an assistant which knows
+  nothing rather than like a missing environment variable.
+
 Odoo addon skeleton (M5):
 
 - `odoo_atlas`, the Odoo half of Atlas: `atlas.conversation`, `atlas.message` and

@@ -66,12 +66,12 @@ odoo-atlas/
 │   └── odoo_atlas/               #   the Odoo addon — a thin adapter
 │       ├── __manifest__.py
 │       ├── models/               #   atlas.conversation, atlas.message, settings
-│       ├── controllers/          # (M6) REST endpoints the engine calls back into
-│       ├── services/             # (M6) HTTP client for atlas-api
-│       ├── wizards/              # (M7) ingest-source configuration wizard
+│       ├── controllers/          #   REST endpoints the engine calls back into
+│       ├── services/             #   context tokens, secrets, engine client
+│       ├── wizards/              #   ingest-source configuration wizard
 │       ├── views/                #   XML: forms, lists, menus, actions, settings
 │       ├── security/             #   groups, ir.model.access.csv, record rules
-│       ├── data/                 # (M7) ir.cron, suggested prompts
+│       ├── data/                 #   ir.cron, suggested prompts
 │       ├── static/src/           # (M11) OWL components, SCSS, XML templates
 │       └── tests/                #   Odoo TransactionCase / HttpCase
 ├── services/
@@ -82,13 +82,13 @@ odoo-atlas/
 │       │   ├── application/      # (M2) use cases. Orchestration only.
 │       │   ├── infrastructure/   # (M3) adapters
 │       │   │   ├── llamaindex/   #     ONLY package that may import llama_index
-│       │   │   ├── persistence/  #     PgVectorStore — our schema, SQLAlchemy Core
+│       │   │   ├── persistence/  #     PgVectorStore — our schema, explicit SQL
 │       │   │   ├── providers/    #     Anthropic / OpenAI / Voyage SDK adapters
-│       │   │   └── odoo/         #     OdooGateway HTTP adapter
+│       │   │   └── odoo/         #     OdooGateway HTTP adapter and fake
 │       │   ├── interfaces/       #   FastAPI routers, CLI entrypoints
 │       │   ├── config/           #   typed settings, composition root
 │       │   └── prompts/          #   versioned Jinja2 templates
-│       ├── migrations/           # (M4) Alembic
+│       ├── migrations/           #   Alembic
 │       └── tests/{unit,integration,contract}
 ├── evaluation/                   # (M12) golden question set + metrics harness
 ├── docker/                       #   Dockerfiles per image
@@ -97,10 +97,11 @@ odoo-atlas/
 │   ├── architecture/
 │   ├── assets/                   # (M14) diagrams and screenshots
 │   ├── installation.md
-│   ├── developer-guide.md        # (M2)
-│   ├── api.md                    # (M6)
+│   ├── developer-guide.md
+│   ├── api.md                    #   the Odoo callback API
+│   ├── ingestion.md              #   sources, cost, the job queue
 │   └── deployment.md             # (M14)
-├── scripts/                      # (M7) seed and reindex helpers
+├── scripts/                      # (M14) seed helpers; `atlas` CLI covers reindex
 ├── docker-compose.yml
 ├── Makefile
 ├── pyproject.toml                #   workspace-level tooling config

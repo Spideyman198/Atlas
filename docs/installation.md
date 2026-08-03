@@ -130,11 +130,34 @@ are most likely to change:
 | `ODOO_PORT` | `8069` | Change if 8069 is taken |
 | `ATLAS_API_PORT` | `8000` | Bound to `127.0.0.1` only |
 | `ODOO_LOAD_DEMO_DATA` | `true` | `false` for an empty database |
-| `ODOO_INIT_MODULES` | `base` | Becomes `base,odoo_atlas` at M5 |
+| `ODOO_INIT_MODULES` | `base,odoo_atlas` | Only read when the database is created |
 | `ATLAS_LOG_LEVEL` | `INFO` | `DEBUG` while developing |
 
 Model provider keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `VOYAGE_API_KEY`) are
-present but unused until M3.
+optional: the stack defaults to the offline providers and starts without an
+account.
+
+### Secrets
+
+Two are required, and the stack refuses to start without them. `.env.example`
+ships development values; replace both in anything anyone else can reach.
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+| Variable | Held by | Purpose |
+| --- | --- | --- |
+| `ATLAS_SERVICE_TOKEN` | Odoo and the engine | Proves a call on `/atlas/api/…` came from the engine |
+| `ATLAS_CONTEXT_SECRET` | Odoo alone | Signs the tokens naming the acting user |
+
+The split matters: the engine is deliberately not given the signing key, so it
+can replay a user context Odoo issued but cannot mint one for a user of its
+choosing. [docs/api.md](api.md) explains the mechanism.
+
+Every Atlas setting on the Odoo side comes from the environment rather than from
+the database, so **Settings → Atlas** reports them read-only and offers a *Test
+Connection* button rather than editable fields.
 
 `.env` is git-ignored and must stay that way. It is the only file in the repository
 that will ever hold a secret.

@@ -24,6 +24,12 @@
               action="atlas_message_action"
               sequence="10"/>
 
+    <menuitem id="menu_atlas_access_log"
+              name="Access Log"
+              parent="menu_atlas_technical"
+              action="atlas_access_log_action"
+              sequence="20"/>
+
     <menuitem id="menu_atlas_configuration"
               name="Configuration"
               parent="menu_atlas_root"
@@ -35,5 +41,17 @@
               parent="menu_atlas_configuration"
               action="atlas_config_settings_action"
               sequence="10"/>
+
+    <menuitem id="menu_atlas_ingest_wizard"
+              name="Configure Indexing"
+              parent="menu_atlas_configuration"
+              action="atlas_ingest_wizard_action"
+              sequence="20"/>
+
+    <menuitem id="menu_atlas_ingest_sources"
+              name="Ingest Sources"
+              parent="menu_atlas_configuration"
+              action="atlas_ingest_source_action"
+              sequence="30"/>
 
 </odoo>

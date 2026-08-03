@@ -89,6 +89,73 @@ second user would show them results assembled from records they may not read.
 The record rules stop a user reaching into someone else's conversation;
 `atlas.conversation.write` stops the reverse.
 
+## The authorization boundary
+
+The addon's `controllers/atlas_api.py` is where the engine asks Odoo what the
+person who asked a question may see. The protocol is documented in
+[api.md](api.md); what matters here is the shape of the rule it enforces.
+
+**No `sudo()`, anywhere in the addon.** Not on the request path, not in the
+models, not for configuration. There is no allow-list, because the moment one
+exists the rule becomes a judgement call and the reason to trust it goes away.
+`addons/odoo_atlas/tests/test_no_sudo.py` scans the source and fails the build,
+so this is a property rather than a convention.
+
+That rule is why Atlas configuration comes from the environment. Reading
+`ir.config_parameter` needs system rights, and the code that reads it runs as
+whichever user asked a question — so a config parameter would have forced the
+exception the rule exists to avoid. The secrets are better off out of the
+database anyway.
+
+**Two secrets, and the split is load-bearing.** `ATLAS_SERVICE_TOKEN` proves a
+call came from the engine. `ATLAS_CONTEXT_SECRET` signs the short-lived tokens
+naming the acting user, and is never given to the engine. If the engine held it,
+it could mint a token for any user it liked and Odoo would believe it, which
+would make the whole authorization story decorative.
+
+On the engine's side, the property is held up by types. `CandidateChunk` comes
+out of retrieval; `AuthorizedChunk` is what the prompt assembler will accept; and
+the only thing that converts one to the other is
+`atlas.application.authorization.AuthorizationFilter`. Skipping stage 2 is not a
+step somebody could forget — under `mypy --strict` it does not compile.
+
+The filter fails closed on everything, including exception types that do not
+exist yet:
+
+```python
+except AtlasError as exc:
+    raise AuthorizationError("could not confirm access with Odoo") from exc
+except Exception as exc:      # deliberately broad
+    raise AuthorizationError("could not confirm access with Odoo") from exc
+```
+
+An unreachable Odoo, a slow one, or one returning nonsense all produce a refused
+answer. None of them produces an unfiltered one. `/readyz` gates on Odoo for the
+same reason: with it down the engine can clear no candidates, so every answer it
+could give would be a refusal.
+
+## Ingestion
+
+The cold path, documented in full in [ingestion.md](ingestion.md). Three things
+are worth knowing before reading the code.
+
+**The hash check comes before the embedding call.** That ordering is the whole
+economics of the feature, and `test_sync_source.py` asserts it directly: a sync
+with nothing changed makes zero provider calls. Moving that check would pass
+every other test in the suite.
+
+**LlamaIndex lives in exactly one package.** `atlas.infrastructure.llamaindex`
+supplies the sentence splitter and the file readers, and an `import-linter`
+contract fails the build if it is imported anywhere else. The containment is
+falsifiable, not asserted: delete the dependency and `test_document_loader.py` is
+the only thing that fails.
+
+**Ingestion reads as a different user from queries.** `SourceReader` goes to
+`/atlas/api/ingest/*` as the integration user; `OdooGateway` goes to
+`/atlas/api/*` as the person who asked. Two doors, so neither can be mistaken for
+the other — and the index being wider than any answer is exactly why the
+query-time check cannot be skipped.
+
 ## Configuration
 
 Settings come from `ATLAS_*` environment variables and are validated once at

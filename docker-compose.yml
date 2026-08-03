@@ -1,13 +1,13 @@
 # ---------------------------------------------------------------------------
 # Odoo Atlas — local development stack.
 #
-# Three services, one PostgreSQL cluster with two logical databases:
-#   postgres    PostgreSQL 17 + pgvector 0.8   → databases `odoo` and `atlas`
-#   odoo        Odoo 19 CE + the odoo_atlas addon (mounted from ./addons)
-#   atlas-api   The retrieval/orchestration engine (FastAPI)
+# Four services, one PostgreSQL cluster with two logical databases:
+#   postgres      PostgreSQL 17 + pgvector 0.8   → databases `odoo` and `atlas`
+#   odoo          Odoo 19 CE + the odoo_atlas addon (mounted from ./addons)
+#   atlas-api     The retrieval/orchestration engine (FastAPI)
+#   atlas-worker  Drains the ingestion queue
 #
-# The engine runs beside Odoo rather than inside it — see ADR-0002. The
-# `atlas-worker` service joins this file in M7, when its entrypoint exists.
+# The engine runs beside Odoo rather than inside it — see ADR-0002.
 #
 # This file is development-oriented: source is bind-mounted for live reload and
 # ports are published to the host. A hardened production overlay ships in M14.
@@ -27,6 +27,12 @@ x-atlas-environment: &atlas-environment
   ATLAS_EMBEDDING__MODEL: ${ATLAS_EMBEDDING__MODEL:-hash-embedding-v1}
   ATLAS_EMBEDDING__DIMENSIONS: ${ATLAS_EMBEDDING__DIMENSIONS:-1536}
   ATLAS_EMBEDDING__API_KEY: ${OPENAI_API_KEY:-}
+  # How the engine reaches Odoo to authorize what it retrieved (ADR-0006). The
+  # database is named explicitly because these calls carry no session: the
+  # adapter sends it as the X-Odoo-Database header.
+  ATLAS_ODOO__BASE_URL: http://odoo:8069
+  ATLAS_ODOO__DATABASE: ${ODOO_DB_NAME:-odoo}
+  ATLAS_ODOO__SERVICE_TOKEN: ${ATLAS_SERVICE_TOKEN}
   # Bind-mounted source takes precedence over the wheel baked into the image.
   # Removing this variable makes the container run purely from the image.
   PYTHONPATH: /app/src
@@ -77,9 +83,26 @@ services:
       ODOO_DB_NAME: ${ODOO_DB_NAME:-odoo}
       ODOO_INIT_MODULES: ${ODOO_INIT_MODULES:-base}
       ODOO_LOAD_DEMO_DATA: ${ODOO_LOAD_DEMO_DATA:-true}
+      # Read by the odoo_atlas addon. All of its configuration comes from the
+      # environment rather than from ir.config_parameter, because the code that
+      # reads it runs as whichever user asked a question — and reading a config
+      # parameter needs system rights, which would put a sudo() on the request
+      # path (addons/odoo_atlas/services/engine.py).
+      ATLAS_ENGINE_URL: http://atlas-api:8000
+      ATLAS_ENGINE_TIMEOUT: ${ATLAS_ENGINE_TIMEOUT:-60}
+      ATLAS_CONTEXT_TOKEN_TTL: ${ATLAS_CONTEXT_TOKEN_TTL:-900}
+      # Shared with the engine: proves a call on /atlas/api/... came from it.
+      ATLAS_SERVICE_TOKEN: ${ATLAS_SERVICE_TOKEN:?ATLAS_SERVICE_TOKEN is required — see .env.example}
+      # Odoo's alone. Signs the tokens naming the acting user, and is deliberately
+      # NOT given to the engine: if the engine could mint one it could read as any
+      # user it liked, which is the property ADR-0006 exists to protect.
+      ATLAS_CONTEXT_SECRET: ${ATLAS_CONTEXT_SECRET:?ATLAS_CONTEXT_SECRET is required — see .env.example}
+      # The Odoo user id ingestion reads as. It must hold
+      # odoo_atlas.group_atlas_ingest; what it may read is what Atlas may index.
+      ATLAS_INGEST_UID: ${ATLAS_INGEST_UID:-0}
     volumes:
       - odoo-filestore:/var/lib/odoo
-      # The addon lands here in M5. Read-only: Odoo must never write to source.
+      # Read-only: Odoo must never write to its own source.
       - ./addons:/mnt/extra-addons:ro
       - ./docker/odoo/odoo.conf:/etc/odoo/odoo.conf:ro
     ports:
@@ -118,6 +141,32 @@ services:
       # Loopback only. The engine is an internal service (ADR-0002); the Odoo
       # container reaches it over the compose network as http://atlas-api:8000.
       - "127.0.0.1:${ATLAS_API_PORT:-8000}:8000"
+
+  # Drains the ingestion queue. Separate from atlas-api because ingestion is the
+  # cold path: a full sync runs for minutes and would otherwise compete with
+  # answering questions for the same event loop. Scale it by running more of
+  # them — `FOR UPDATE SKIP LOCKED` means two workers never take the same job.
+  atlas-worker:
+    build:
+      context: .
+      dockerfile: docker/atlas/Dockerfile
+      target: runtime
+    image: odoo-atlas/atlas:dev
+    container_name: atlas-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment: *atlas-environment
+    volumes:
+      - ./services/atlas/src:/app/src:ro
+    command: ["atlas", "worker"]
+    healthcheck:
+      # The image ships an HTTP liveness probe for the API. A worker serves no
+      # HTTP, so it would fail that check forever while working perfectly. There
+      # is no useful equivalent either: a polling loop is alive exactly when its
+      # process is, which `restart: unless-stopped` already handles.
+      disable: true
 
   # Lint, type-check and test runner. Started only via `--profile tools`, so it
   # never runs as part of the stack. Exists so contributors need no local Python

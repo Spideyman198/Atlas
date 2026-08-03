@@ -5,6 +5,14 @@ Alembic migrations and nowhere else, which is the containment that makes
 hand-written SQL maintainable (ADR-0008).
 """
 
+from atlas.infrastructure.persistence.ingest_state import PgEmbeddingCache, PgSourceState
+from atlas.infrastructure.persistence.job_queue import PgJobQueue
 from atlas.infrastructure.persistence.pgvector_store import PgVectorStore, register_vector
 
-__all__ = ["PgVectorStore", "register_vector"]
+__all__ = [
+    "PgEmbeddingCache",
+    "PgJobQueue",
+    "PgSourceState",
+    "PgVectorStore",
+    "register_vector",
+]

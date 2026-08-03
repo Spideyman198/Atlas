@@ -70,10 +70,18 @@ ignore = [
     "PLR2004", # expected values inline are clearer than named constants
     "D1",      # a well-named test documents itself
     "ARG001",  # fixtures are often requested for their side effect
+    # A test double conforms to a port, so it takes the port's arguments whether
+    # this particular double reads them or not.
+    "ARG002",
     "ANN401",  # test helpers legitimately take **kwargs: Any
     "EM101",   # raising a literal is fine when constructing a failure case
     "TRY301",  # ditto
     "PLC0415", # imports inside a test keep an optional SDK out of collection
+    # Fixture tokens are the point of a test about tokens. The rule cannot tell
+    # `token="alice-token"` from a leaked credential; a reviewer can.
+    "S105",
+    "S106",
+    "S107",
 ]
 # Adapters implement documented ports. The contract — arguments, guarantees,
 # exceptions — is stated once on the Protocol in `atlas.domain.ports`; repeating
@@ -91,19 +99,30 @@ ignore = [
     # where `Any` belongs.
     "ANN401",
 ]
+# The source templates render raw ERP field values, which arrive as whatever
+# Odoo felt like sending: a string, a float, `False` for "unset", or a
+# `[id, "Name"]` pair. Turning that into text is the whole job of this module,
+# so `Any` is the honest type for its input — the same reason it is allowed in
+# the adapters above.
+"services/atlas/src/atlas/domain/sources.py" = ["ANN401"]
 # Odoo addons follow Odoo's conventions, not ours: field definitions are mutable
 # class attributes by design, and the framework supplies most docstring context.
 # TID252 is off because an addon's `__init__.py` must use relative imports —
 # Odoo loads a module as `odoo.addons.<name>`, so the package is not importable
 # under its own directory name.
-"addons/**" = ["D", "ANN", "RUF012", "A003", "PLR0913", "TID252"]
+#
+# `EM` is off because Odoo and werkzeug exceptions are constructed with their
+# message inline — `raise BadRequest("'tool' must be a string")` — and hoisting
+# every one to a local would obscure far more than it documents. The engine keeps
+# the rule; this is the same carve-out `TRY003` already has repository-wide.
+"addons/**" = ["D", "ANN", "RUF012", "A003", "PLR0913", "TID252", "EM"]
 # An addon's package files exist to make Odoo import the modules below them.
 # Nothing re-exports anything, and the order is Odoo's loading order, not isort's.
 "addons/**/__init__.py" = ["F401", "I001"]
 # Odoo test cases assert, and they name expected values inline. `PT` is off
 # because these run under Odoo's own unittest-based runner, not pytest, so
 # `assertRaises` and friends are the correct spelling here.
-"addons/**/tests/**" = ["S101", "PLR2004", "PT"]
+"addons/**/tests/**" = ["S101", "PLR2004", "PT", "S105", "S106", "S107"]
 # An Odoo manifest is a bare dict literal at module level.
 "addons/**/__manifest__.py" = ["B018"]
 
@@ -141,6 +160,13 @@ enable_error_code = [
 # treats as a private import. The class is public and documented.
 module = ["voyageai.*"]
 implicit_reexport = true
+
+[[tool.mypy.overrides]]
+# The LlamaIndex reader integrations ship no `py.typed`. `llama-index-core` does,
+# so only the reader package is untyped — and it is reached from exactly one
+# module, which converts its output to `str` immediately (ADR-0003).
+module = ["llama_index.readers.*"]
+ignore_missing_imports = true
 
 [tool.pydantic-mypy]
 init_forbid_extra = true

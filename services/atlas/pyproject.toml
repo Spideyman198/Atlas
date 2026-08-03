@@ -24,7 +24,16 @@ classifiers = [
 # Dependencies are added per milestone rather than up front:
 #   M3  anthropic, openai, voyageai, tenacity, tiktoken
 #   M4  sqlalchemy, alembic, pgvector
+#   M6  httpx
 #   M7  llama-index-core, llama-index-readers-file
+#
+# `httpx` is pinned here even though the vendor SDKs already pull it in. The
+# Odoo gateway imports it directly, and a direct import satisfied by somebody
+# else's transitive dependency breaks the day that dependency moves.
+#
+# LlamaIndex is `-core` plus one narrowly scoped reader package, never the
+# `llama-index` meta-package (ADR-0003 §5). Both are reachable only from
+# `atlas.infrastructure.llamaindex`, which import-linter enforces.
 dependencies = [
     "fastapi==0.141.1",
     "uvicorn[standard]==0.52.1",
@@ -36,7 +45,13 @@ dependencies = [
     "anthropic==0.120.2",
     "openai==2.52.0",
     "voyageai==0.5.0",
+    "httpx==0.28.1",
+    "llama-index-core==0.14.23",
+    "llama-index-readers-file==0.6.0",
 ]
+
+[project.scripts]
+atlas = "atlas.interfaces.cli:main"
 
 [project.optional-dependencies]
 dev = [
