@@ -59,7 +59,6 @@ dependencies = [
 [project.scripts]
 atlas = "atlas.interfaces.cli:main"
 atlas-eval = "atlas.interfaces.evaluate:main"
-atlas-bench = "atlas.interfaces.benchmark:main"
 
 [project.optional-dependencies]
 # The OTLP exporter pulls in grpc. A deployment that never traces should not pay

@@ -32,7 +32,7 @@ How a question becomes an answer, and what stops it becoming a plausible one.
         answer
 ```
 
-## Nothing to go on is a refusal
+## Refusal when there is nothing to ground on
 
 If no documents were retrieved and no tool is available, the model is not
 called. Not called and ignored — not called at all.
@@ -154,7 +154,7 @@ evidence.
 Citations come back ordered by block number, matching the markers in the text, so
 the list under an answer can be scanned by number rather than read through.
 
-## The tool loop
+## Tool loop
 
 The model may call tools, read the results, and call more. Bounded at five
 rounds — a model that keeps calling tools never answers, and the bound turns that
@@ -179,7 +179,7 @@ summary would produce.
 The history budget is deliberately smaller than the retrieval budget. History
 competes with the context that grounds the answer, and grounding wins.
 
-## The endpoint
+## Endpoint
 
 ```
 POST /v1/chat
@@ -209,7 +209,7 @@ The context token is minted by Odoo and passed straight through; the engine neve
 inspects it (ADR-0006). `X-Request-ID` is adopted as the trace id when supplied,
 so one id spans the addon, the engine and Odoo's access log.
 
-## What this does not do yet
+## Known limitations
 
 - **Relevance is the model's judgement.** Retrieval returns its best candidates
   whether or not they are any good, and fusion scores are not calibrated, so

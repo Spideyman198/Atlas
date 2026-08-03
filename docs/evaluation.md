@@ -2,7 +2,7 @@
 
 How the assistant is measured, and what each number is worth.
 
-## The golden set
+## Golden set
 
 `services/atlas/evaluation/` holds a corpus of twelve documents and nine
 labelled questions. Both are files, not an Odoo export, so `make eval` produces
@@ -24,7 +24,7 @@ a metric drops, the first question is whether retrieval got worse or the label
 was wrong, and a set with no reasoning recorded cannot answer that. A test
 enforces that the note is there.
 
-## Three metrics, because each hides what the others show
+## Retrieval metrics
 
 | Metric | Answers | Blind to |
 | --- | --- | --- |
@@ -41,7 +41,7 @@ rankings where the right answer is arithmetic. A test asserting "recall went up"
 against a real retriever proves nothing about whether recall is computed
 correctly.
 
-## What the offline gate can and cannot measure
+## Scope of the offline gate
 
 ```bash
 make eval
@@ -63,13 +63,13 @@ real corpus. That is the number that says something about semantics. It costs
 money, so it is not what CI runs, and it does not gate: it scores whatever
 happens to be indexed, which is not a controlled input.
 
-### The cut-off is 4, not 8
+### Cut-off
 
 Retrieval serves eight chunks in production. The gate uses four, because the
 fixture corpus is twelve documents: at k=8 recall is 1.000 for any ranking that
 is not actively broken, and a floor under a saturated metric catches nothing.
 
-### The floors
+### Thresholds
 
 Absolute, not "no worse than last time". A relative gate ratchets downward one
 acceptable-looking commit at a time and nobody notices until the number is half
@@ -78,7 +78,7 @@ what it was.
 Raise them when the number improves. Lowering one needs a sentence in the commit
 message saying why.
 
-## The report is written for whoever has to fix it
+## Report format
 
 ```
 question                    recall     MRR    nDCG  missed from top-k
@@ -139,7 +139,7 @@ The endpoint is deliberately outside the OpenAPI schema. It is scraped by a
 collector, not called by a client, and listing it as an API invites somebody to
 build on the format.
 
-### Measurement never breaks the thing measured
+### Failure isolation
 
 Every recorder method swallows its own failures and logs at debug. A metrics
 backend is not worth a failed answer, and a malformed label — a programming

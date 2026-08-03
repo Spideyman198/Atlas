@@ -128,6 +128,11 @@ ignore = [
 # because these run under Odoo's own unittest-based runner, not pytest, so
 # `assertRaises` and friends are the correct spelling here.
 "addons/**/tests/**" = ["S101", "PLR2004", "PT", "S105", "S106", "S107"]
+# The benchmarks are a command-line tool, not a library. They print tables for a
+# person to read, and they interpolate a table *identifier* into DDL — composed
+# with `psycopg.sql.Identifier`, which is the safe spelling, but S608 matches on
+# the f-string shape rather than on what it contains.
+"benchmarks/**" = ["T201", "S608"]
 # An Odoo manifest is a bare dict literal at module level.
 "addons/**/__manifest__.py" = ["B018"]
 

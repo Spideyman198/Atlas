@@ -187,9 +187,15 @@ switch ($Target) {
         Invoke-Checked ($Compose + @('exec', '-T', 'postgres', 'psql', '-U', $user,
             '-d', $database, '-c', 'CREATE EXTENSION IF NOT EXISTS vector'))
         $dsn = "postgresql://${user}:${password}@postgres:5432/$database"
+        $commit = (& git rev-parse HEAD)
+        $branch = (& git rev-parse --abbrev-ref HEAD)
+        $dirty = if ((& git status --porcelain)) { '1' } else { '' }
         Invoke-Checked ($Compose + @('--profile', 'tools', 'run', '--rm',
-            '-e', "ATLAS_BENCH_DATABASE_URL=$dsn", 'atlas-tools',
-            'python', '-m', 'atlas.interfaces.benchmark'))
+            '-e', "ATLAS_BENCH_DATABASE_URL=$dsn",
+            '-e', "ATLAS_BENCH_COMMIT=$commit",
+            '-e', "ATLAS_BENCH_BRANCH=$branch",
+            '-e', "ATLAS_BENCH_DIRTY=$dirty",
+            'atlas-tools', 'python', '-m', 'benchmarks.run_all'))
     }
 
     'check' {

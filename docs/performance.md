@@ -1,53 +1,94 @@
 # Performance
 
-Measured, not estimated. Everything here comes from `make bench` against
-PostgreSQL 17 with pgvector 0.8.6, in the compose stack, on the machine that ran
-it. Reproduce with:
+Measured, not estimated. Every number below was produced by the scripts in
+[`benchmarks/`](../benchmarks/README.md), and the raw output — including the
+environment that produced it — is committed under `benchmarks/results/`.
+
+## Measurement environment
+
+Every table on this page was produced under these conditions unless it says
+otherwise.
+
+| | |
+| --- | --- |
+| Dataset | 50,000 chunks, synthetic, clustered (`benchmarks/generate_dataset.py`) |
+| Embedding dimensions | 1536 |
+| Neighbours requested | 8 (`top_k`), matching `ATLAS_RETRIEVAL__LIMIT` |
+| Queries per point | 40 |
+| PostgreSQL | 17.10 (Debian 17.10-1.pgdg12+1) |
+| pgvector | 0.8.6 |
+| Host | AMD Ryzen 7 7445HS, 12 cores, 7.4 GB available to the container |
+| Platform | Linux 6.18 WSL2, containerised (Docker Desktop on Windows 11) |
+| `shared_buffers` | 128 MB |
+| `work_mem` | 4 MB |
+| `maintenance_work_mem` | 64 MB session default, raised to 1 GB for index builds |
+| Commit | recorded in each results file under `environment.git.commit` |
+
+Reproduce with:
 
 ```bash
 make bench
 ```
 
-Numbers move with hardware. What does not move is the *shape*: which
-configurations are faster than which, and by how much.
+Absolute timings depend on the host. What transfers is the relative cost of one
+query shape against another; what does not is the absolute recall figure, and
+the ranking it appears to imply. See Benchmark limitations.
 
-## The finding that mattered
+## Performance findings
+
+### Filtered dense search returns incomplete results without `iterative_scan`
 
 Atlas's dense search filters by company and visibility, then orders by vector
-distance. That is the natural way to write it and it was **32× slower than it
-needed to be**.
-
-At 50,000 chunks, `LIMIT 8`, `ef_search = 40`:
+distance. Measured at 50,000 chunks, `LIMIT 8`, `ef_search = 40`:
 
 | Configuration | p50 | p95 | Rows returned |
 | --- | ---: | ---: | ---: |
-| Filter in `WHERE`, planner free | 126.95 ms | 156.50 ms | 8.0 |
-| Forced index scan, no iterative scan | 2.82 ms | 148.47 ms | **5.1** |
-| Forced index scan + `iterative_scan = relaxed_order` | **3.94 ms** | **11.43 ms** | 8.0 |
+| Unfiltered, planner free | 1.91 ms | 5.44 ms | 8.0 |
+| Filtered, planner free | 1.30 ms | 1.88 ms | **4.3** |
+| Filtered, forced index, no iterative scan | 1.01 ms | 2.08 ms | **4.3** |
+| Filtered, forced index + `relaxed_order` | 2.12 ms | 8.62 ms | 8.0 |
 
-Two separate problems, and each fix is useless without the other.
+Source: `benchmarks/results/20260803T190633Z-latency.json`.
+Command: `python -m benchmarks.latency --rows 50000 --queries 40 --top-k 8`.
 
-**The planner does not choose the vector index.** With a company filter matching
-a third of the table, PostgreSQL costs a bitmap scan over
-`(company_id, visibility)` below an HNSW walk and takes it — then sorts sixteen
-thousand rows by distance. `EXPLAIN` says so plainly:
+The HNSW walk exhausts its candidate list on rows the filter rejects and stops.
+It returns what it has — four rows where eight were asked for — with no error.
+The two fastest configurations in that table are fast because they are doing
+less work than the query requires. Repeated runs put the under-return between
+3.2 and 4.3 rows of 8; it is never complete.
+
+`EXPLAIN` on a probe whose neighbours are mostly outside the filter shows the
+same effect at its limit:
 
 ```
-->  Bitmap Heap Scan on chunks (actual time=0.512..103.520 rows=16666 loops=1)
-      Recheck Cond: ((company_id = 1) AND (visibility >= 1))
+== Dense search, planner free ==
+Limit (actual time=1.861..1.862 rows=0 loops=1)
+  ->  Index Scan using bench_chunks_hnsw_idx (actual time=1.859..1.859 rows=0)
+Execution Time: 1.976 ms
+
+== Dense search, forced index + relaxed_order ==
+Limit (actual time=2.471..3.843 rows=8 loops=1)
+  ->  Index Scan using bench_chunks_hnsw_idx (actual time=2.470..3.840 rows=8)
+Execution Time: 3.868 ms
 ```
 
-`hnsw.iterative_scan` was already set and did nothing, because it governs an
-index scan that was never chosen.
+Zero rows against eight, from the same query. Reproduce with `make bench-explain`.
 
-**Forcing the index alone returns incomplete results.** The HNSW walk exhausts
-its candidate list on rows the filter rejects and stops — 5.1 rows for a `LIMIT`
-of 8, silently. This is the filtered-ANN recall collapse
-[ADR-0004](adr/0004-vector-store-and-index-strategy.md) names, and it is what
-`iterative_scan` exists for.
+### The planner's choice of scan is not stable
 
-Both are now set together, scoped with `SET LOCAL` to the dense search's own
-transaction:
+On an earlier corpus shape the same filtered query produced a different plan: a
+bitmap scan over `(company_id, visibility)` followed by a sort of 16,666 rows,
+at **126.95 ms p50** — complete results, 32× slower. `hnsw.iterative_scan` was
+configured then and did nothing, because it governs an index scan the planner
+had not chosen.
+
+The committed fixture does not reproduce that plan; it reproduces the
+under-return above. Both are failure modes of the same unforced configuration,
+and which one appears depends on statistics the corpus happens to have. This is
+recorded rather than dropped because it is the reason the fix disables the
+alternatives rather than only setting `iterative_scan`.
+
+### Configuration that ships
 
 ```sql
 SET LOCAL hnsw.iterative_scan = relaxed_order;
@@ -55,114 +96,138 @@ SET LOCAL enable_bitmapscan = off;
 SET LOCAL enable_seqscan = off;
 ```
 
-Scoping matters. The lexical search *wants* a bitmap scan — that is how a GIN
-index is read — so this must never leak onto it.
+`SET LOCAL`, scoped to the dense search's own transaction. The lexical search
+*wants* a bitmap scan — that is how a GIN index is read — so these must not leak
+onto it. Applied in `PgVectorStore._search`.
 
 ## HNSW parameter sweep
 
-50,000 chunks, 1536-dimensional vectors, top-8, 40 queries per point.
+50,000 chunks, top-8, recall against exact search.
 
 | m | ef_construction | ef_search | recall | p50 | p95 | build | index |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 16 | 64 | 10 | 0.078 | 1.72 ms | 2.64 ms | 13.0 s | 391 MB |
-| 16 | 64 | 40 | 0.166 | 2.00 ms | 3.24 ms | 13.0 s | 391 MB |
-| 16 | 64 | 200 | 0.394 | 3.98 ms | 5.08 ms | 13.0 s | 391 MB |
-| 16 | 128 | 40 | 0.116 | 2.10 ms | 2.94 ms | 23.9 s | 391 MB |
-| 16 | 128 | 200 | 0.506 | 4.89 ms | 7.47 ms | 23.9 s | 391 MB |
-| 32 | 128 | 40 | 0.150 | 3.40 ms | 5.60 ms | 39.3 s | 391 MB |
-| 32 | 128 | 200 | 0.503 | 8.40 ms | 13.17 ms | 39.3 s | 391 MB |
+| 16 | 64 | 10 | 0.031 | 1.86 ms | 3.29 ms | 19.4 s | 391 MB |
+| 16 | 64 | 40 | 0.084 | 2.20 ms | 4.58 ms | 19.4 s | 391 MB |
+| 16 | 64 | 200 | 0.472 | 4.85 ms | 6.15 ms | 19.4 s | 391 MB |
+| 16 | 128 | 10 | 0.106 | 1.48 ms | 2.37 ms | 32.7 s | 391 MB |
+| 16 | 128 | 40 | 0.250 | 2.33 ms | 4.26 ms | 32.7 s | 391 MB |
+| 16 | 128 | 200 | 0.466 | 6.15 ms | 8.20 ms | 32.7 s | 391 MB |
+| 32 | 128 | 10 | 0.087 | 2.89 ms | 4.97 ms | 45.3 s | 391 MB |
+| 32 | 128 | 40 | 0.131 | 3.84 ms | 8.07 ms | 45.3 s | 391 MB |
+| 32 | 128 | 200 | 0.509 | 10.78 ms | 18.22 ms | 45.3 s | 391 MB |
 
-At 200,000 chunks the same sweep builds in 155–346 s and produces a 1.5–1.6 GB
-index, with p50 in the 1.2–1.5 ms range.
+Full grid in `benchmarks/results/20260803T190136Z-recall.csv`.
 
-### What these recall numbers are, and are not
+Two things are stable across runs and one is not.
 
-**They are not a prediction of production recall.** They are recall against exact
-search *on a synthetic corpus*, and the corpus is the weak part. Getting one that
-behaves like real embeddings took four attempts, each of which produced a table
-that measured nothing:
+**Stable:** recall rises monotonically with `ef_search`, and latency rises with
+it. Build time rises with `m` and with `ef_construction`. Index size does not
+move across the grid at this row count.
 
-1. Uniform `random()` — every vector in the positive orthant, all pairs at ~0.75
-   cosine similarity, "nearest" decided by tie-breaking.
-2. Isotropic Gaussian — spread over the sphere, but every point equidistant from
-   every other. Recall 1.000 at every setting: a flat line.
-3. Probing with vectors drawn from the table — the graph entry lands on the probe
-   itself and its true neighbours are its own edges. Recall 1.000 again.
-4. Tight clusters — ~170 members per centroid at near-identical distance, so the
-   "true top 8" is decided by rounding.
+**Not stable: the ranking between build configurations.** An earlier run of the
+same sweep on the same host measured `m=16, ef_construction=64` at 0.163 for
+`ef_search = 40`, against 0.084 here — a factor of two — and put
+`m=32, ef_construction=128` ahead of both, where this run puts it last. The
+fixture's residual near-ties (see Benchmark limitations) move enough between
+generations to reorder the configurations.
 
-The fifth attempt — clustered with a per-point radius — produces the monotone
-curve above. It is a curve, and the *ordering* it shows is the actionable part:
-recall rises with `ef_search`, latency rises with it, and a higher
-`ef_construction` buys recall at the same `ef_search`. The absolute values are
-depressed by residual near-ties in the fixture and should not be read as what
-Atlas will achieve on real embeddings.
-
-**Latency, build time and index size do not carry that caveat.** The index does
-not know what the vectors mean; timing 1536-dimensional distance computations
-over a graph of 50,000 nodes measures the same work either way.
-
-The honest way to get production recall is `make eval --live` against a real
-corpus, which is a deployment activity rather than a CI one.
+**Configurations cannot be ranked by these recall figures.** Only the
+within-run `ef_search` trend survives repetition.
 
 ### Chosen parameters
 
 `m = 16`, `ef_construction = 64`, `ef_search = 40`.
 
-`m = 32` costs 3× the build time and is slower at query time for no measured
-recall advantage. `ef_construction = 128` doubles build time for a small recall
-gain that `ef_search` buys more cheaply — and `ef_search` can be changed without
-a rebuild, which `ef_construction` cannot.
+Chosen on **build cost and defaults, not on measured recall**, because the recall
+measurements do not support a ranking. `m = 16, ef_construction = 64` is the
+cheapest to build — 19.4 s against 45.3 s for `m = 32` at this row count, on
+every rebuild — and `ef_search = 40` is pgvector's default, sitting where the
+latency curve is still flat.
 
-`ef_search = 40` is pgvector's default and sits where the latency curve is still
-flat. Raising it to 200 roughly doubles p50. That is the dial to turn if
-production recall proves insufficient.
+`ef_search` is the dial to turn first if production recall proves short, because
+it needs no rebuild. Raising it to 200 roughly doubles p50.
+
+**Open item:** whether `m` or `ef_construction` should rise cannot be answered by
+this fixture. It needs `make eval --live` against a real corpus.
 
 ## Query plans
 
-Dense search, with the pre-filter and the settings above:
+Dense search, with the pre-filter and the shipped settings:
 
 ```
 Index Scan using chunks_embedding_hnsw_idx on chunks
-  (actual time=7.539..7.648 rows=8 loops=1)
-  Buffers: shared hit=362 read=1860
-Execution Time: 7.687 ms
+  (actual time=2.470..3.840 rows=8 loops=1)
+Execution Time: 3.868 ms
 ```
 
 Lexical search:
 
 ```
 Bitmap Heap Scan on chunks (actual time=0.478..0.530 rows=4 loops=1)
-  ->  Bitmap Index Scan on chunks_tsv_gin_idx
-        (actual time=0.449..0.449 rows=10 loops=1)
+  ->  Bitmap Index Scan on chunks_tsv_gin_idx (actual time=0.449..0.449 rows=10)
   Buffers: shared hit=23 read=24
 Execution Time: 0.663 ms
 ```
 
-The lexical half is an order of magnitude cheaper than the dense half and reads
-a fiftieth of the buffers. Fusing them costs almost nothing beyond the dense
-query.
+The lexical half is roughly an order of magnitude cheaper than the dense half.
+Fusing them costs little beyond the dense query.
 
-## Where the time actually goes
+## No query cache
 
-Retrieval is not the expensive part of an answer, which is why there is **no
-query cache**. One is easy to build and the measurements say it would save
-single-digit milliseconds off a request dominated by seconds:
+Retrieval is not the expensive part of an answer. A cache is easy to build, and
+the measurements say it would save single-digit milliseconds from a request
+dominated by seconds:
 
 | Stage | Cost | Source |
 | --- | --- | --- |
-| Dense search | ~4 ms p50 | measured above |
+| Dense search | ~2.1 ms p50 | measured above |
 | Lexical search | <1 ms | measured above |
 | Authorization round-trip to Odoo | one HTTP call per model | batched, M6 |
 | Model call | seconds | provider |
 
 The cache that pays for itself already exists: the embedding cache and
 content-hash short-circuit from M7, which turn a re-sync into a no-op and cost
-nothing per query. Adding a second cache in front of a 4 ms query would add an
-invalidation problem to save 0.1% of a request.
+nothing per query. A second cache in front of a 2 ms query would add an
+invalidation problem to save a fraction of a percent.
 
-This is a decision the numbers made. Before measuring, a retrieval cache looked
-like an obvious win.
+Before measuring, a retrieval cache looked like an obvious win. This entry is
+kept as the worked example for the rule in `benchmarks/README.md`: measure
+first, implement second.
+
+## Benchmark limitations
+
+**Absolute recall figures do not transfer to production.** They are recall
+against exact search on a synthetic corpus, and the corpus is the weak part.
+Getting one that behaves like real embeddings took five attempts; the first four
+each produced a table that measured nothing — scan order, equidistant points,
+probes drawn from the index itself, and 170-way ties. The fifth produces the
+monotone curve above, and residual near-ties still depress the absolute values.
+
+What this means in practice: use the *ordering* in the sweep, not the numbers.
+A configuration scoring 0.256 here is better than one scoring 0.163 here; neither
+figure predicts what either would score on real embeddings.
+
+**Latency, build time and index size do transfer**, subject to hardware. The
+index does not know what the vectors mean.
+
+**Recall varies substantially between runs.** The same sweep on the same host
+measured `m=16, ef_construction=64` at `ef_search=40` as 0.163 on one run and
+0.084 on the next, and reordered the build configurations between them. The
+corpus is regenerated per run, and its residual near-ties are enough to move the
+result. This is why the parameter choice above rests on build cost rather than
+on the recall column.
+
+**Single host, few runs.** Every table is one run on one machine. No confidence
+intervals, no cross-machine comparison. Percentiles are nearest-rank over 40
+samples, so p95 is the 38th value rather than an interpolation.
+
+**The corpus is uniform in a way real ones are not.** Every chunk is the same
+length and every cluster the same size. Real corpora have long documents,
+sparse topics and duplicate boilerplate.
+
+**Production recall is unmeasured.** It requires a real corpus and a real
+embedding model: `make eval --live`. That is a deployment activity, not a CI one,
+and it has not been run against a production dataset.
 
 ## Infrastructure notes
 
@@ -176,14 +241,9 @@ could not resize shared memory segment ... : No space left on device
 which reads like a disk problem and is not one. The compose file sets `2gb`.
 
 **`maintenance_work_mem`** must be ≥ 1 GB during an index build. HNSW builds in
-memory or spills catastrophically.
+memory or spills catastrophically. The benchmark raises it per build; a
+deployment should set it in `postgresql.conf`.
 
-## Reproducing
-
-```bash
-make bench                       # 20k rows, the default sweep
-make bench ROWS=200000           # scale check
-```
-
-`ATLAS_BENCH_DATABASE_URL` must point at a database the benchmark may create and
-drop tables in. It is never the configured corpus — the harness would eat it.
+**Corpus generation is the slow step**, roughly 250 s for 50,000 rows, because
+each vector is 1536 trigonometric expressions evaluated in SQL. Index builds are
+15–40 s by comparison.

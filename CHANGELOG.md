@@ -23,9 +23,15 @@ Security hardening and performance (M13):
 - Per-user rate limiting, keyed on the context token rather than the address,
   checked before anything is fetched.
 - A threat model, stating what is defended and what is not.
-- `make bench`: an HNSW parameter sweep reporting recall against exact search,
-  p50/p95 latency, build time, index size and `EXPLAIN (ANALYZE, BUFFERS)`
-  plans. Results in [docs/performance.md](docs/performance.md), replacing the
+- `benchmarks/`: a standalone, reproducible harness — dataset generation, an
+  HNSW recall sweep, a query-shape latency comparison, and the `EXPLAIN
+  (ANALYZE, BUFFERS)` plans. `make bench` runs it. Each run writes a timestamped
+  JSON and CSV file to `benchmarks/results/` carrying the commit, the
+  PostgreSQL and pgvector versions, the host and the exact command, so a
+  published table can be checked against the run that produced it.
+  [benchmarks/README.md](benchmarks/README.md) documents what each number is
+  worth, including the four dataset distributions that measured nothing.
+- Measured figures in [docs/performance.md](docs/performance.md) replace the
   estimates that were in the data-architecture document.
 - `shm_size: 2gb` on the PostgreSQL container. A parallel HNSW build asks for
   about a gigabyte of shared memory and Docker's 64 MB default fails with "No

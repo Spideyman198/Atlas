@@ -49,7 +49,7 @@ read them. A user without sales rights is never told `overdue_invoices` exists,
 so it cannot be called and then refused — which reads to a model as an obstacle
 to route around.
 
-## Why not let the model write a domain
+## Why the model does not emit domains
 
 An Odoo domain is a small programming language: nested boolean operators, dotted
 traversal across relations, and operators whose meaning depends on the model.
@@ -95,7 +95,7 @@ Caps are in the same file: 50 rows, 12 filters, 50 values in an `in` list, 200
 characters of text, 3 grouping levels. A model that asks for ten thousand rows
 will not read them and the context window cannot hold them.
 
-## What the compiler refuses, and why each rule exists
+## Rejected inputs
 
 Every rule below was added because a test produced the failure, not because
 somebody imagined it.
@@ -120,7 +120,7 @@ allow-listed field with an allow-listed operator and the ORM accepts it, or
 nothing compiles at all. A domain the ORM rejects is a 500 where a rejection was
 wanted. Three of the six rows above came from that test.
 
-## Errors are answers
+## Error handling
 
 A rejected tool call comes back to the model as a tool *result*, not an
 exception:

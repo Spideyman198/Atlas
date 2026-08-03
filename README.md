@@ -165,6 +165,7 @@ docs/                 ADRs and architecture documentation
 | [Chat panel](docs/chat-ui.md) | The Odoo-side UI, and why the browser never holds a token |
 | [Evaluation](docs/evaluation.md) | The golden set, the CI gate, metrics, traces and cost |
 | [Performance](docs/performance.md) | Measured latency, the HNSW sweep, query plans |
+| [Benchmarks](benchmarks/README.md) | How every published number was produced |
 | [Security](docs/security.md) | Threat model, what is defended and what is not |
 | [Decision records](docs/adr/README.md) | Eight decisions with the alternatives that were rejected |
 | [Developer guide](docs/developer-guide.md) | Layers, configuration, errors, testing |

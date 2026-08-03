@@ -164,7 +164,20 @@ bench: ## Sweep HNSW parameters and report recall, latency and query plans
 	  -c 'CREATE EXTENSION IF NOT EXISTS vector'
 	$(COMPOSE) --profile tools run --rm \
 	  -e ATLAS_BENCH_DATABASE_URL=postgresql://$${POSTGRES_USER:-odoo}:$${POSTGRES_PASSWORD:-odoo_dev_password}@postgres:5432/$(BENCH_DB) \
-	  atlas-tools python -m atlas.interfaces.benchmark --rows $(ROWS)
+	  -e ATLAS_BENCH_COMMIT="$$(git rev-parse HEAD)" \
+	  -e ATLAS_BENCH_BRANCH="$$(git rev-parse --abbrev-ref HEAD)" \
+	  -e ATLAS_BENCH_DIRTY="$$(git status --porcelain | head -c 1)" \
+	  atlas-tools python -m benchmarks.run_all --rows $(ROWS)
+
+# The query plans, as psql prints them. Needs a corpus already generated, which
+# `bench` leaves behind only if it fails — so this generates its own.
+.PHONY: bench-explain
+bench-explain: ## Print EXPLAIN (ANALYZE, BUFFERS) for the retrieval queries
+	$(COMPOSE) --profile tools run --rm \
+	  -e ATLAS_BENCH_DATABASE_URL=postgresql://$${POSTGRES_USER:-odoo}:$${POSTGRES_PASSWORD:-odoo_dev_password}@postgres:5432/$(BENCH_DB) \
+	  atlas-tools python -m benchmarks.generate_dataset --rows $(ROWS)
+	$(COMPOSE) exec -T postgres psql -U $${POSTGRES_USER:-odoo} -d $(BENCH_DB) \
+	  -v ON_ERROR_STOP=1 < benchmarks/explain.sql
 
 .PHONY: migrate
 migrate: ## Apply Alembic migrations to the Atlas database

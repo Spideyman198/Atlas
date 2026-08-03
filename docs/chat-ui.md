@@ -2,7 +2,7 @@
 
 What a user sees, and why the browser is not allowed to talk to the engine.
 
-## The browser never holds a context token
+## Token handling
 
 A context token is a bearer credential: whoever has it can act as that user
 against the engine for as long as it lives ([ADR-0006](adr/0006-data-access-and-authorization.md)).
@@ -23,7 +23,7 @@ deployment, and nothing in the UI needs it to be.
 The request goes as form fields rather than a JSON body so Odoo's CSRF check —
 which reads form parameters — still applies.
 
-## Streaming costs a second cursor
+## Streaming and transaction scope
 
 Odoo commits the request transaction when the handler returns. That happens
 *before* werkzeug iterates the response body, so anything the generator writes
@@ -53,7 +53,7 @@ token all have to travel in the body.
 Errors arrive as events, not status codes. Once the first byte is out the status
 line is gone.
 
-## Citations are chips, and chips open records
+## Citations
 
 An answer marks its sources inline — `[1]`, `[2]` — and lists them underneath as
 chips carrying the record's name. Clicking one opens that record in Odoo.

@@ -299,8 +299,9 @@ Ordered by impact, which is roughly the reverse of the order people usually atta
 7. **Cap the context budget in tokens, not chunk count.** Prompt cost is the largest
    per-query expense.
 8. **`EXPLAIN (ANALYZE, BUFFERS)` in the benchmark suite**, so performance claims
-   come with numbers. `make bench` produces them; the results and what they do
-   and do not establish are in [performance.md](../performance.md).
+   come with numbers. `make bench` produces them; the harness is in
+   [benchmarks/](../../benchmarks/README.md) and the results, with what they do
+   and do not establish, in [performance.md](../performance.md).
 
 **No query cache.** Retrieval measured ~4 ms p50 against a request dominated by
 seconds of model call. Adding a cache in front of it would buy 0.1% and cost an
