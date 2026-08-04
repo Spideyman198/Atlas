@@ -115,14 +115,20 @@ jobs:
       contents: read
       packages: write
     strategy:
+      # One image failing should not cancel the other: a half-published release
+      # is easier to reason about when both legs report their own outcome.
+      fail-fast: false
       matrix:
         include:
           - name: atlas
             dockerfile: docker/atlas/Dockerfile
             target: runtime
+          # `runtime` explicitly. The Dockerfile's last stage is `test`, which
+          # carries Chrome and builds on amd64 only, so an empty target would
+          # both publish the test image and break the arm64 half.
           - name: odoo
             dockerfile: docker/odoo/Dockerfile
-            target: ""
+            target: runtime
     steps:
       - uses: actions/checkout@v4
         with:

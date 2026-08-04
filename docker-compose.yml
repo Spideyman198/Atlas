@@ -85,6 +85,10 @@ services:
     build:
       context: .
       dockerfile: docker/odoo/Dockerfile
+      # `test`, not `runtime`: this image runs the addon suite for CI,
+      # `make test-odoo` and `make up` alike, and the tours need a browser.
+      # The published image is built from `runtime`, which carries neither.
+      target: test
     image: odoo-atlas/odoo:dev
     container_name: atlas-odoo
     restart: unless-stopped

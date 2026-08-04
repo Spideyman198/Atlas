@@ -225,6 +225,10 @@ jobs:
         # Catches interpolation errors and schema mistakes before anyone runs it.
         run: docker compose --env-file .env.example config --quiet
 
+      # QEMU so the arm64 halves can be built here rather than discovered at
+      # release time. Publishing failed once on an architecture nothing built
+      # until the release workflow reached it.
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
       - name: Build the engine image
@@ -236,6 +240,38 @@ jobs:
           push: false
           load: true
           tags: odoo-atlas/atlas:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The published targets, on both architectures, with nothing loaded or
+      # pushed. This is the check that the release workflow's build will
+      # succeed: the Odoo runtime image is otherwise never built until a tag
+      # already exists, which is exactly how an arm64-only failure shipped.
+      #
+      # Pushes only. The arm64 halves are emulated and slow, and a release can
+      # only follow a push to main — so this runs before every release without
+      # putting QEMU in the way of pull request feedback.
+      - name: Build the Odoo image for every architecture
+        if: github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/odoo/Dockerfile
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build the engine image for every architecture
+        if: github.event_name == 'push'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/atlas/Dockerfile
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
