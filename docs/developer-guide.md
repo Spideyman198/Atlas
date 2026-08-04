@@ -284,15 +284,37 @@ when a test fails, so it gates CI like any other job.
 Coverage is not measured here. Odoo's runner has no coverage integration worth
 the wiring, and the number would not be comparable to the engine's.
 
-The chat panel is tested through a real browser. The Odoo image installs Google
-Chrome and `websocket-client` for it — Ubuntu's `chromium` package is a stub
-that installs a snap and produces a binary that cannot start in a container.
+The chat panel is tested through a real browser. Google Chrome and
+`websocket-client` provide it — Ubuntu's `chromium` package is a stub that
+installs a snap and produces a binary that cannot start in a container.
 
 Both are load-bearing in a way worth knowing about: **Odoo skips a browser test
 when either is missing instead of failing it**. A suite full of tours reports
 green having run none of them, which is exactly what happened the first time
 these were written. `TestTheBrowserTestsCanRun` asserts both are present, so
 that situation is a red build rather than a quiet one.
+
+They live in a separate image target. `docker/odoo/Dockerfile` has two:
+
+| Target | Contains | Built by | Architectures |
+| --- | --- | --- | --- |
+| `runtime` | Odoo and the bootstrap wrapper | the release workflow | amd64, arm64 |
+| `test` | `runtime` plus Chrome and `websocket-client` | `docker-compose.yml` | amd64 |
+
+Everything local goes through compose, so `make up`, `make test-odoo` and CI all
+get `test` and all run the tours. Only the release workflow builds `runtime`,
+and it names the target explicitly — the last stage in the file is `test`, so an
+omitted target would publish the browser rather than leave it out.
+
+The split is not a preference. Google ships Chrome for linux/amd64 and no other
+Linux architecture, so installing it unconditionally made the arm64 half of the
+published manifest unbuildable. Keeping a browser out of a deployment image is
+worth doing regardless.
+
+**Browser tours need amd64.** On arm64 hardware the `test` target cannot be
+built, because no usable containerised browser exists for it on Ubuntu Noble.
+The rest of the suite — `make check`, the engine tests, the addon's non-browser
+tests — is unaffected.
 
 ### Troubleshooting: the addon suite reports zero tests
 
@@ -371,3 +393,49 @@ So, for any adapter over a network protocol:
 
 New provider adapters are held to this before they ship, and the regression tests
 in `tests/unit/test_openai_provider.py` stay as the worked example.
+
+## Releasing
+
+Releases are automatic. Push a `fix:` or `feat:` commit to `main`; CI runs, and
+on success the Release workflow determines the version from the commit prefixes,
+writes it, tags it, publishes both images and creates the GitHub release.
+
+Two things are written by hand and two by the automation, and mixing them up
+breaks the release:
+
+| | Owner |
+| --- | --- |
+| `CHANGELOG.md` `[Unreleased]` section | you, before the release |
+| `services/atlas/pyproject.toml` version | semantic-release |
+| `addons/odoo_atlas/__manifest__.py` version | `scripts/check_versions.py --write` |
+| Tag, GitHub release, images | the workflow |
+
+Write the entry under `## [Unreleased]`. That heading is what the release job
+lifts into the GitHub release notes, so an entry filed under a version number
+publishes a release whose body reads "Nothing yet." Rename the heading to the
+version after the tag exists.
+
+**Never bump the version by hand.** The release job decides whether it ran by
+checking `git diff --quiet` after semantic-release writes the version. A version
+already committed at the value semantic-release computes produces no diff, so
+`released=false`, and the tag, the images and the release are all silently
+skipped.
+
+### Traps this pipeline has already hit
+
+Each of these produced a green or absent build rather than an obvious failure.
+
+- **A revert of a release commit stops CI.** semantic-release commits
+  `chore(release): X.Y.Z [skip ci]`, and `git revert` copies that subject into
+  its own message verbatim. GitHub reads `[skip ci]` on the pushed head commit
+  and creates no runs for any workflow — CI never starts, so the Release
+  workflow never gets its `workflow_run` event. Amend the message before pushing.
+- **Detached HEAD stops semantic-release.** It matches the current branch name
+  against `[tool.semantic_release.branches.main]`, and checking out a SHA leaves
+  no name to match. The workflow re-attaches the validated commit to a local
+  `main` before running it.
+- **`github.repository` is not a valid image path.** It keeps the account's
+  capitalisation, and OCI repository names must be lowercase. The workflow
+  lowercases it into a step output.
+- **The Odoo image's last stage is `test`.** An omitted build target publishes
+  the browser image and fails on arm64. The workflow names `runtime`.

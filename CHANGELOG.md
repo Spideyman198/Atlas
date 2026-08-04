@@ -57,6 +57,35 @@ It also records the first end-to-end run against a live model provider, which
   every interval and the container reported unhealthy while serving requests
   normally. It now uses `python3`.
 
+- The release pipeline could not complete, and had never completed: 1.0.0 was
+  tagged by hand. Three faults, each latent since the workflow was written and
+  each surfacing only once the one before it was cleared. semantic-release
+  refused to run against the detached HEAD left by a SHA checkout, so no version
+  was ever written. The image tags were built from `github.repository`, which
+  keeps the account's capitalisation and is not a valid lowercase OCI path. The
+  Odoo image then failed to build for arm64, for the reason under *Changed*
+  below. `fail-fast` is now off for the image matrix, so one image failing no
+  longer cancels the other.
+
+- CI never built the images it publishes. Both published targets are now built
+  for both architectures on every push to `main`, which is where the arm64
+  failure would have been caught instead of at release time.
+
+### Changed
+
+- The published Odoo image no longer contains a browser. `docker/odoo/Dockerfile`
+  now has two targets: `runtime`, which is what gets published, and `test`, which
+  adds Chrome and `websocket-client` for the tours. Compose builds `test`, so
+  `make up`, `make test-odoo` and CI are unchanged and still run the tours.
+
+  Google ships Chrome for linux/amd64 and no other Linux architecture, so
+  installing it unconditionally made the arm64 half of the published manifest
+  unbuildable. Both images are now genuinely multi-architecture. A deployment
+  image is also a poor place to carry a browser it never runs.
+
+  Anything that depended on a browser being present in the published Odoo image
+  must use the `test` target instead. Nothing in this repository did.
+
 ### Added
 
 - Pricing entries for the Gemini models reachable through the compatibility
