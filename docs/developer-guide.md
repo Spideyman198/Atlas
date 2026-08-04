@@ -294,6 +294,38 @@ green having run none of them, which is exactly what happened the first time
 these were written. `TestTheBrowserTestsCanRun` asserts both are present, so
 that situation is a red build rather than a quiet one.
 
+### Troubleshooting: the addon suite reports zero tests
+
+On Windows, run `make test-odoo` from **PowerShell** — `.\make.ps1 test-odoo` —
+and not from Git Bash, MSYS or an MSYS-backed shell.
+
+Git Bash rewrites arguments that look like absolute POSIX paths into Windows
+paths before the process ever sees them. The test selector is `/odoo_atlas`,
+which looks exactly like one, so Odoo receives:
+
+```
+--test-tags C:/Program Files/Git/odoo_atlas
+```
+
+Odoo does not treat an unusable tag as an error. It logs `Invalid tag`, matches
+nothing, and exits **zero**:
+
+```
+ERROR odoo.tests.tag_selector: Invalid tag C:/Program Files/Git/odoo_atlas
+WARNING odoo.tests.result: 0 failed, 0 error(s) of 0 tests
+```
+
+A green exit code, an installed module, and not one test executed. The same run
+from PowerShell reports `0 failed, 0 error(s) of 174 tests`.
+
+Check the count, not the exit code. `of 0 tests` is a failed run whatever the
+shell told you. If Git Bash is the only shell available, `MSYS_NO_PATHCONV=1`
+disables the rewriting for one command.
+
+This is the third form of the same hazard on this page — a skipped browser test,
+a stub too polite to fail, and now a mangled selector. Nothing here treats "the
+command exited zero" as evidence that anything ran.
+
 ## Adding a port and an adapter
 
 1. Define the `Protocol` in `atlas/domain/ports/`, using domain types only.
@@ -304,3 +336,38 @@ that situation is a red build rather than a quiet one.
 5. Add the adapter to the shared contract test suite for that port.
 
 If step 4 is the only place the concrete class is named, the layering is right.
+
+### Test doubles must be faithful to the wire, not to the happy path
+
+A stub stands in for an SDK, and it is only worth what it reproduces. If it hands
+the adapter a finished object, it cannot show whether the adapter assembles one —
+it tests the assertion, not the code.
+
+This is not hypothetical. The OpenAI adapter's `stream()` never emitted tool
+calls at all: streamed answers to any question needing a tool came back empty,
+on OpenAI, on Azure and on every compatible endpoint. The suite was green
+throughout, because `_openai_stream` replayed a stream containing no tool calls
+to reassemble. The bug reached a stable release and was found by asking a live
+provider a question, not by a test. Fixed in
+[1.0.1](../CHANGELOG.md); the stub now fragments calls the way the wire does.
+
+So, for any adapter over a network protocol:
+
+- **Reproduce the delivery, not just the payload.** Streamed data arrives in
+  pieces, in an order the protocol chooses, sometimes split mid-token. Replay it
+  that way. OpenAI splits one tool call across many chunks and keys the parts by
+  `index`; a double that skips the splitting proves nothing about reassembly.
+- **Cover the dialects, not only the reference implementation.** One adapter
+  serves several hosts. Fields the reference vendor always populates are optional
+  elsewhere: Google's compatibility endpoint omits `index` on both streamed tool
+  calls and embedding items, and each omission was a distinct crash or silent
+  drop. Where a field is optional in practice, type it optional in the double and
+  test both.
+- **Exercise every branch the port exposes.** A provider that streams *and*
+  returns tool calls needs a test for the two together, not one each.
+- **Verify against the real service before release.** A recorded response or a
+  scripted call is enough. The two 1.0.1 defects were both visible in the first
+  live request and in no test.
+
+New provider adapters are held to this before they ship, and the regression tests
+in `tests/unit/test_openai_provider.py` stay as the worked example.

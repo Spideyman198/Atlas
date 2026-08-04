@@ -10,7 +10,74 @@ covers, what it deliberately does not, and the deprecation policy are in
 
 ## [Unreleased]
 
-Nothing yet.
+Two defects in the OpenAI adapter, both found by running Atlas against a live
+provider for the first time. Neither is specific to one vendor: the same adapter
+serves OpenAI, Azure OpenAI and any OpenAI-compatible endpoint, and both faults
+were reachable from all of them. No configuration change is needed to pick these
+up, and nothing in the public surface moved.
+
+This is a patch release: the version is decided by semantic-release from the
+commit prefixes, and this section becomes that version's entry and its GitHub
+release notes. Rename the heading once the tag exists.
+
+It also records the first end-to-end run against a live model provider, which
+[1.0.0](#100---2026-08-04) listed as unverified.
+
+### Fixed
+
+- Streamed responses dropped every tool call. The OpenAI adapter's `stream()`
+  yielded text deltas and a stop reason but never the calls themselves, so the
+  tool loop in `atlas.application.synthesis` saw an empty list, ended on its
+  first round, and returned an empty answer to any question that needed a tool.
+  The adapter now reassembles calls from the deltas and emits them on the
+  terminal chunk, as the Anthropic adapter already did.
+
+  Reassembly handles both shapes on the wire. OpenAI splits one call across many
+  chunks — id and name first, then the argument JSON a few characters at a time —
+  and identifies the parts by `index`. Google's compatibility endpoint sends each
+  call whole and omits `index` entirely.
+
+- Embedding responses whose items carry no `index` raised `TypeError: '<' not
+  supported between instances of 'int' and 'NoneType'` and killed the sync that
+  hit them. Ordering was restored by sorting on a field OpenAI always populates
+  and Google leaves null. The response order now stands when any index is
+  missing, which is the order every such endpoint returns items in anyway.
+
+- `EmbeddingSettings` gained `base_url`. Chat has had one since M3b; embeddings
+  did not, which left every OpenAI-compatible embedding host unreachable while
+  the same host worked for chat.
+
+- `docker-compose.yml` mapped the provider keys only from `ANTHROPIC_API_KEY` and
+  `OPENAI_API_KEY`, so setting `ATLAS_CHAT__API_KEY` in `.env` had no effect and
+  the container received an empty string. Both keys now accept the `ATLAS_*` name
+  first and fall back to the vendor-specific one, and the `BASE_URL` variables
+  are passed through.
+
+- Odoo's healthcheck called `curl`, which the image does not ship. It failed on
+  every interval and the container reported unhealthy while serving requests
+  normally. It now uses `python3`.
+
+### Added
+
+- Pricing entries for the Gemini models reachable through the compatibility
+  endpoint. The engine refuses to start on an unpriced model by design (M3b), so
+  a new model needs one.
+
+- Regression tests for both adapter defects, covering the fragmented-and-indexed
+  shape and the whole-and-unindexed shape, plus ordering across two calls.
+
+  The streamed-tool-call fault was invisible to the suite because the test double
+  replayed a stream that contained no tool calls at all — a stub that hands over
+  a finished call cannot show whether the adapter reassembles one. The double now
+  fragments calls the way the wire delivers them. These tests are permanent, and
+  the fidelity rule they came from is written down in
+  [docs/developer-guide.md](docs/developer-guide.md).
+
+- [ADR-0009](docs/adr/0009-defer-aggregate-ordering.md) records that the
+  `aggregate` tool returns rows in no particular order under a 50-row cap while
+  describing itself as suitable for "which is the biggest" questions, and defers
+  the fix to a minor release because it changes behaviour rather than repairing
+  an implementation defect.
 
 ## [1.0.0] - 2026-08-04
 

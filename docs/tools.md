@@ -49,6 +49,23 @@ read them. A user without sales rights is never told `overdue_invoices` exists,
 so it cannot be called and then refused — which reads to a model as an obstacle
 to route around.
 
+### Known limitation: `aggregate` does not order its rows
+
+`aggregate` passes no ordering to `_read_group` and caps the result at 50 rows.
+Groups come back in Odoo's default order for the grouping field, and anything
+past the cap is dropped with nothing in the result to say so.
+
+For "how much" and "how many" this does not matter. For "which is the biggest" —
+which the tool's own description invites — it does: above 50 groups the largest
+can be truncated before the model sees it, and the answer is then wrong with no
+signal attached. Below the cap the model has every candidate but must compare
+them itself, which it does not always get right.
+
+Treat a superlative over a large grouping as unverified until this is fixed.
+[ADR-0009](adr/0009-defer-aggregate-ordering.md) records why the fix waits for a
+minor release: adding an order parameter changes a published tool schema, which
+a patch release may not do.
+
 ## Why the model does not emit domains
 
 An Odoo domain is a small programming language: nested boolean operators, dotted
