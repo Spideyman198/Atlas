@@ -10,18 +10,19 @@ covers, what it deliberately does not, and the deprecation policy are in
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.0.1] - 2026-08-04
+
 Two defects in the OpenAI adapter, both found by running Atlas against a live
 provider for the first time. Neither is specific to one vendor: the same adapter
 serves OpenAI, Azure OpenAI and any OpenAI-compatible endpoint, and both faults
 were reachable from all of them. No configuration change is needed to pick these
 up, and nothing in the public surface moved.
 
-This is a patch release: the version is decided by semantic-release from the
-commit prefixes, and this section becomes that version's entry and its GitHub
-release notes. Rename the heading once the tag exists.
-
 It also records the first end-to-end run against a live model provider, which
-[1.0.0](#100---2026-08-04) listed as unverified.
+[1.0.0](#100---2026-08-04) listed as unverified, and the first release the
+automation produced on its own — 1.0.0 was tagged by hand.
 
 ### Fixed
 
@@ -629,5 +630,6 @@ Planning and architecture (M0):
   Authorization stays in the application layer.
   See [ADR-0003](docs/adr/0003-rag-framework-selection.md).
 
-[Unreleased]: https://github.com/Spideyman198/Atlas/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Spideyman198/Atlas/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/Spideyman198/Atlas/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Spideyman198/Atlas/releases/tag/v1.0.0
