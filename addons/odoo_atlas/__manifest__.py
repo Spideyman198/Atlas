@@ -19,7 +19,7 @@ rules (ADR-0006).
     # prefix. Written by the release automation from the engine package's
     # version, and `scripts/check_versions.py` fails the build if the two
     # disagree.
-    "version": "19.0.1.0.1",
+    "version": "19.0.1.0.0",
     "category": "Productivity",
     "author": "Odoo Atlas contributors",
     "website": "https://github.com/Spideyman198/Atlas",

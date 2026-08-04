@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "atlas"
-version = "1.0.1"
+version = "1.0.0"
 description = "Odoo Atlas engine — retrieval, orchestration and generation for the Odoo Atlas copilot."
 readme = "README.md"
 license = "LGPL-3.0-or-later"
