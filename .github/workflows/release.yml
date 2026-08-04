@@ -141,6 +141,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # `github.repository` preserves the account's capitalisation, so the tags
+      # came out as `ghcr.io/Spideyman198/Atlas/atlas:1.0.1`. An OCI repository
+      # name may not contain uppercase, and buildx rejects the tag before it
+      # builds anything: "repository name must be lowercase". The registry half
+      # of the reference is case-insensitive, the repository half is not.
+      - name: Lowercase the image namespace
+        id: namespace
+        run: echo "path=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -150,8 +159,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.name }}:${{ needs.version.outputs.version }}
-            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.name }}:latest
+            ${{ env.REGISTRY }}/${{ steps.namespace.outputs.path }}/${{ matrix.name }}:${{ needs.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ steps.namespace.outputs.path }}/${{ matrix.name }}:latest
           # Provenance and an SBOM, so a deployment can be traced to the commit
           # and scanned without rebuilding it.
           provenance: true
