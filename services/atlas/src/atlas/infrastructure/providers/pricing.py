@@ -65,6 +65,15 @@ _PRICES: Final[dict[str, ModelPrice]] = {
     "text-embedding-3-large": ModelPrice(Decimal("0.13"), Decimal(0)),
     "gpt-4o": ModelPrice(Decimal("2.50"), Decimal("10.00")),
     "gpt-4o-mini": ModelPrice(Decimal("0.15"), Decimal("0.60")),
+    # --- Google Gemini, through its OpenAI-compatible endpoint (unverified) ---
+    # Reached by setting `ATLAS_CHAT__BASE_URL` rather than by a Gemini adapter:
+    # the compatibility endpoint speaks the OpenAI protocol, so the existing
+    # adapter serves it. Rates are the published paid-tier ones; usage inside the
+    # free tier costs nothing, and cost reporting will overstate it accordingly.
+    "gemini-2.5-flash": ModelPrice(Decimal("0.30"), Decimal("2.50")),
+    "gemini-2.5-flash-lite": ModelPrice(Decimal("0.10"), Decimal("0.40")),
+    "gemini-2.5-pro": ModelPrice(Decimal("1.25"), Decimal("10.00")),
+    "gemini-embedding-001": ModelPrice(Decimal("0.15"), Decimal(0)),
     # --- Voyage (unverified against a live account) ---
     "voyage-3": ModelPrice(Decimal("0.06"), Decimal(0)),
     "voyage-3-lite": ModelPrice(Decimal("0.02"), Decimal(0)),

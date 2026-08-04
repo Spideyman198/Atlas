@@ -20,13 +20,25 @@ x-atlas-environment: &atlas-environment
   ATLAS_DATABASE__URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${ATLAS_DB_NAME:-atlas}
   # Defaults are the offline providers so the stack starts without an account.
   # See .env.example for switching to a real vendor.
+  #
+  # The keys accept `ATLAS_*` first and fall back to the vendor-specific names.
+  # Mapping them only from `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` worked for
+  # the two vendors that were anticipated and silently broke for anything else:
+  # setting `ATLAS_CHAT__API_KEY` in `.env` had no effect, the container
+  # received an empty string, and the engine refused to start with "no API key
+  # configured" — pointing at a variable that was, in fact, set.
+  #
+  # `BASE_URL` is what reaches any OpenAI-compatible host: Azure, Google's
+  # compatibility endpoint, or something self-hosted.
   ATLAS_CHAT__VENDOR: ${ATLAS_CHAT__VENDOR:-fake}
   ATLAS_CHAT__MODEL: ${ATLAS_CHAT__MODEL:-fake-model}
-  ATLAS_CHAT__API_KEY: ${ANTHROPIC_API_KEY:-}
+  ATLAS_CHAT__API_KEY: ${ATLAS_CHAT__API_KEY:-${ANTHROPIC_API_KEY:-}}
+  ATLAS_CHAT__BASE_URL: ${ATLAS_CHAT__BASE_URL:-}
   ATLAS_EMBEDDING__VENDOR: ${ATLAS_EMBEDDING__VENDOR:-hash}
   ATLAS_EMBEDDING__MODEL: ${ATLAS_EMBEDDING__MODEL:-hash-embedding-v1}
   ATLAS_EMBEDDING__DIMENSIONS: ${ATLAS_EMBEDDING__DIMENSIONS:-1536}
-  ATLAS_EMBEDDING__API_KEY: ${OPENAI_API_KEY:-}
+  ATLAS_EMBEDDING__API_KEY: ${ATLAS_EMBEDDING__API_KEY:-${OPENAI_API_KEY:-}}
+  ATLAS_EMBEDDING__BASE_URL: ${ATLAS_EMBEDDING__BASE_URL:-}
   # How the engine reaches Odoo to authorize what it retrieved (ADR-0006). The
   # database is named explicitly because these calls carry no session: the
   # adapter sends it as the X-Odoo-Database header.
@@ -115,7 +127,17 @@ services:
       - "${ODOO_PORT:-8069}:8069"
     healthcheck:
       # /web/health needs no database, so this reports the server itself.
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8069/web/health || exit 1"]
+      #
+      # Python rather than curl: the Odoo image does not ship curl, so the
+      # previous check failed with "curl: not found" on every interval and the
+      # container reported unhealthy for as long as it ran — while serving
+      # requests perfectly. A health check that cannot run is worse than none,
+      # because it looks like a diagnosis.
+      test:
+        - "CMD"
+        - "python3"
+        - "-c"
+        - "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:8069/web/health', timeout=3).status == 200 else 1)"
       interval: 15s
       timeout: 5s
       retries: 5

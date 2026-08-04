@@ -123,7 +123,12 @@ def _embedding_adapter(settings: EmbeddingSettings) -> EmbeddingProvider:
         )
 
     return OpenAIEmbeddingProvider(
-        openai.AsyncOpenAI(api_key=api_key, timeout=settings.timeout_seconds, max_retries=0),
+        openai.AsyncOpenAI(
+            api_key=api_key,
+            base_url=settings.base_url,
+            timeout=settings.timeout_seconds,
+            max_retries=0,
+        ),
         model=settings.model,
         dimensions=settings.dimensions,
         max_batch_size=settings.max_batch_size,

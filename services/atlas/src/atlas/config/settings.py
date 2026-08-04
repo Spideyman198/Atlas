@@ -95,6 +95,16 @@ class EmbeddingSettings(BaseModel):
     vendor: EmbeddingVendor = "openai"
     model: str = "text-embedding-3-small"
     api_key: SecretStr | None = None
+    base_url: str | None = Field(
+        default=None,
+        description=(
+            "Override the API host. The chat side has had this since M3b; the "
+            "embedding side did not, which made every OpenAI-compatible host "
+            "unreachable for embeddings — Azure, Gemini's compatibility "
+            "endpoint, or anything self-hosted — while the same host worked "
+            "for chat."
+        ),
+    )
     dimensions: int = Field(
         default=1536,
         gt=0,
