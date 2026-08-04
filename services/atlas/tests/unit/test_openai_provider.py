@@ -233,6 +233,78 @@ async def test_streaming_requests_usage_explicitly() -> None:
     assert chunks[-1].usage is not None
 
 
+def _tool_call_completion() -> OpenAICompletion:
+    return OpenAICompletion(
+        choices=[
+            OpenAIChoice(
+                message=OpenAIMessage(
+                    tool_calls=[
+                        OpenAIToolCall(
+                            id="call_1",
+                            function=OpenAIFunction(
+                                name="aggregate", arguments='{"model": "sale.order"}'
+                            ),
+                        )
+                    ]
+                ),
+                finish_reason="tool_calls",
+            )
+        ]
+    )
+
+
+async def test_streaming_reassembles_a_fragmented_tool_call() -> None:
+    """The tool loop reads calls off the stream; dropping them empties the answer."""
+    client = StubOpenAIClient(completion=_tool_call_completion())
+
+    chunks = [chunk async for chunk in _chat(client).stream(_request())]
+
+    final = chunks[-1]
+    assert final.stop_reason is StopReason.TOOL_USE
+    assert final.tool_calls == (
+        ToolCall(id="call_1", name="aggregate", arguments={"model": "sale.order"}),
+    )
+
+
+async def test_streaming_reassembles_a_tool_call_that_carries_no_index() -> None:
+    """Google's compatibility endpoint sends each call whole and omits `index`."""
+    client = StubOpenAIClient(completion=_tool_call_completion(), fragment_tool_calls=False)
+
+    chunks = [chunk async for chunk in _chat(client).stream(_request())]
+
+    assert chunks[-1].tool_calls == (
+        ToolCall(id="call_1", name="aggregate", arguments={"model": "sale.order"}),
+    )
+
+
+async def test_streaming_keeps_two_tool_calls_in_the_order_the_model_asked() -> None:
+    completion = OpenAICompletion(
+        choices=[
+            OpenAIChoice(
+                message=OpenAIMessage(
+                    tool_calls=[
+                        OpenAIToolCall(
+                            id="call_1",
+                            function=OpenAIFunction(name="first", arguments='{"a": 1}'),
+                        ),
+                        OpenAIToolCall(
+                            id="call_2",
+                            function=OpenAIFunction(name="second", arguments='{"b": 2}'),
+                        ),
+                    ]
+                ),
+                finish_reason="tool_calls",
+            )
+        ]
+    )
+    client = StubOpenAIClient(completion=completion)
+
+    chunks = [chunk async for chunk in _chat(client).stream(_request())]
+
+    assert [call.name for call in chunks[-1].tool_calls] == ["first", "second"]
+    assert [call.arguments for call in chunks[-1].tool_calls] == [{"a": 1}, {"b": 2}]
+
+
 # --- embeddings ------------------------------------------------------------
 
 
@@ -253,6 +325,23 @@ async def test_out_of_order_results_are_restored_to_input_order() -> None:
             data=[
                 OpenAIEmbeddingItem(embedding=[0.2] * 4, index=1),
                 OpenAIEmbeddingItem(embedding=[0.1] * 4, index=0),
+            ]
+        )
+    )
+
+    result = await _embedder(client, dimensions=4).embed(["first", "second"])
+
+    assert result.vectors[0][0] == pytest.approx(0.1)
+    assert result.vectors[1][0] == pytest.approx(0.2)
+
+
+async def test_results_without_an_index_keep_the_response_order() -> None:
+    """Google's compatibility endpoint returns a null index; sorting on it raised."""
+    client = StubOpenAIClient(
+        embeddings=OpenAIEmbeddingResponse(
+            data=[
+                OpenAIEmbeddingItem(embedding=[0.1] * 4, index=None),
+                OpenAIEmbeddingItem(embedding=[0.2] * 4, index=None),
             ]
         )
     )

@@ -172,7 +172,8 @@ class OpenAICompletion:
 @dataclass
 class OpenAIEmbeddingItem:
     embedding: list[float]
-    index: int = 0
+    # Optional because OpenAI-compatible endpoints do not all populate it.
+    index: int | None = 0
 
 
 @dataclass
@@ -183,8 +184,11 @@ class OpenAIEmbeddingResponse:
 
 
 class _OpenAICompletions:
-    def __init__(self, outcome: OpenAICompletion | Exception) -> None:
+    def __init__(
+        self, outcome: OpenAICompletion | Exception, *, fragment_tool_calls: bool = True
+    ) -> None:
         self._outcome = outcome
+        self._fragment_tool_calls = fragment_tool_calls
         self.calls: list[dict[str, Any]] = []
 
     async def create(self, **payload: Any) -> Any:
@@ -192,16 +196,47 @@ class _OpenAICompletions:
         if isinstance(self._outcome, Exception):
             raise self._outcome
         if payload.get("stream"):
-            return _openai_stream(self._outcome)
+            return _openai_stream(self._outcome, fragment_tool_calls=self._fragment_tool_calls)
         return self._outcome
 
 
-def _openai_stream(completion: OpenAICompletion) -> AsyncIterator[Any]:
-    """Replay a completion as streamed events, usage last."""
+@dataclass
+class _StreamedFunction:
+    name: str | None = None
+    arguments: str | None = None
+
+
+@dataclass
+class _StreamedToolCall:
+    """One tool-call fragment as it appears inside a streamed delta.
+
+    ``index`` is optional because Google's compatibility endpoint omits it; see
+    ``fragment_tool_calls``.
+    """
+
+    function: _StreamedFunction
+    id: str | None = None
+    index: int | None = None
+    type: str = "function"
+
+
+def _openai_stream(
+    completion: OpenAICompletion, *, fragment_tool_calls: bool = True
+) -> AsyncIterator[Any]:
+    """Replay a completion as streamed events, usage last.
+
+    Tool calls are replayed the way the wire actually delivers them, because a
+    stub that hands over a finished call cannot show whether the adapter
+    reassembles one. With ``fragment_tool_calls`` the id and name arrive first
+    and the argument JSON follows one character at a time, each part tagged with
+    its ``index`` — OpenAI's behaviour. Without it each call arrives whole and
+    carries no ``index`` at all, which is what Google's endpoint sends.
+    """
 
     @dataclass
     class _Delta:
         content: str | None = None
+        tool_calls: list[_StreamedToolCall] = field(default_factory=list)
 
     @dataclass
     class _Choice:
@@ -213,13 +248,47 @@ def _openai_stream(completion: OpenAICompletion) -> AsyncIterator[Any]:
         choices: list[_Choice] = field(default_factory=list)
         usage: OpenAIUsage | None = None
 
+    def _fragments(call: OpenAIToolCall, index: int) -> list[_Delta]:
+        if not fragment_tool_calls:
+            return [
+                _Delta(
+                    tool_calls=[
+                        _StreamedToolCall(
+                            id=call.id,
+                            function=_StreamedFunction(
+                                name=call.function.name, arguments=call.function.arguments
+                            ),
+                        )
+                    ]
+                )
+            ]
+        opening = _Delta(
+            tool_calls=[
+                _StreamedToolCall(
+                    id=call.id, index=index, function=_StreamedFunction(name=call.function.name)
+                )
+            ]
+        )
+        return [opening] + [
+            _Delta(
+                tool_calls=[
+                    _StreamedToolCall(index=index, function=_StreamedFunction(arguments=character))
+                ]
+            )
+            for character in call.function.arguments
+        ]
+
     async def generate() -> AsyncIterator[Any]:
-        text = completion.choices[0].message.content or ""
+        choice = completion.choices[0]
+        text = choice.message.content or ""
         for word in text.split(" "):
             if word:
                 yield _Event(choices=[_Choice(delta=_Delta(content=word + " "))])
+        for index, call in enumerate(choice.message.tool_calls):
+            for delta in _fragments(call, index):
+                yield _Event(choices=[_Choice(delta=delta)])
         yield _Event(
-            choices=[_Choice(delta=_Delta(), finish_reason=completion.choices[0].finish_reason)],
+            choices=[_Choice(delta=_Delta(), finish_reason=choice.finish_reason)],
             usage=completion.usage,
         )
 
@@ -272,6 +341,8 @@ class StubOpenAIClient:
         self,
         completion: OpenAICompletion | Exception | None = None,
         embeddings: OpenAIEmbeddingResponse | Exception | None = None,
+        *,
+        fragment_tool_calls: bool = True,
     ) -> None:
         resolved_completion = (
             completion
@@ -280,7 +351,9 @@ class StubOpenAIClient:
                 choices=[OpenAIChoice(message=OpenAIMessage(content="Hello from OpenAI."))]
             )
         )
-        self.chat = _OpenAIChat(_OpenAICompletions(resolved_completion))
+        self.chat = _OpenAIChat(
+            _OpenAICompletions(resolved_completion, fragment_tool_calls=fragment_tool_calls)
+        )
         # `None` means generate a vector per input rather than replay a fixture.
         self.embeddings = _OpenAIEmbeddings(embeddings)
 

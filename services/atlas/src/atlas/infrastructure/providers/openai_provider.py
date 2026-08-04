@@ -97,6 +97,7 @@ class OpenAIChatProvider:
 
         finish_reason: str | None = None
         usage = TokenUsage()
+        calls = _StreamedToolCalls()
 
         try:
             stream = await self._client.chat.completions.create(**payload)
@@ -108,12 +109,23 @@ class OpenAIChatProvider:
                     text = getattr(delta, "content", None) if delta else None
                     if text:
                         yield ChatChunk(text_delta=text)
+                    if delta is not None:
+                        calls.collect(getattr(delta, "tool_calls", None) or [])
                     if getattr(choice, "finish_reason", None):
                         finish_reason = choice.finish_reason
         except Exception as exc:
             raise _translate(exc) from exc
 
-        yield ChatChunk(stop_reason=_stop_reason(finish_reason), usage=usage)
+        # Mirrors the Anthropic adapter: the terminal chunk carries the stop
+        # reason, the usage and the tool calls together. Streaming previously
+        # dropped the calls entirely, so any question the model wanted to answer
+        # with a tool ended the loop in `synthesis` on its first round and
+        # returned an empty answer.
+        yield ChatChunk(
+            stop_reason=_stop_reason(finish_reason),
+            usage=usage,
+            tool_calls=calls.finish(),
+        )
 
     def _payload(self, request: ChatRequest) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -263,6 +275,62 @@ def _tool(tool: ToolDefinition) -> dict[str, Any]:
     }
 
 
+class _StreamedToolCalls:
+    """Reassembles tool calls that arrive in pieces across streamed deltas.
+
+    OpenAI splits one call over many chunks — the id and name in the first, the
+    argument JSON a few characters at a time after it — and identifies the parts
+    by ``index``. Google's compatibility endpoint sends each call whole and omits
+    ``index`` altogether, so position within the delta is the only key available.
+    Both are handled: a fragment with an index joins the slot of that index, one
+    without starts a slot of its own, and slots are emitted in first-seen order.
+    """
+
+    def __init__(self) -> None:
+        self._slots: dict[int, dict[str, str]] = {}
+        self._order: list[int] = []
+        self._anonymous = 0
+
+    def collect(self, fragments: Sequence[Any]) -> None:
+        for fragment in fragments:
+            slot = self._slot_for(fragment)
+            if getattr(fragment, "id", None):
+                slot["id"] = fragment.id
+            function = getattr(fragment, "function", None)
+            if function is None:
+                continue
+            if getattr(function, "name", None):
+                slot["name"] = function.name
+            # Concatenated, never replaced: this is the field OpenAI fragments.
+            if getattr(function, "arguments", None):
+                slot["arguments"] += function.arguments
+
+    def _slot_for(self, fragment: Any) -> dict[str, str]:
+        key = getattr(fragment, "index", None)
+        if key is None:
+            # Negative keys cannot collide with a real index, and `_order` keeps
+            # the emission order right regardless of their sign.
+            self._anonymous += 1
+            key = -self._anonymous
+        if key not in self._slots:
+            self._slots[key] = {"id": "", "name": "", "arguments": ""}
+            self._order.append(key)
+        return self._slots[key]
+
+    def finish(self) -> tuple[ToolCall, ...]:
+        return tuple(
+            ToolCall(
+                id=self._slots[key]["id"],
+                name=self._slots[key]["name"],
+                arguments=_arguments(self._slots[key]["arguments"]),
+            )
+            for key in self._order
+            # A slot with no name is a fragment the provider never completed;
+            # forwarding it would call a tool that does not exist.
+            if self._slots[key]["name"]
+        )
+
+
 def _arguments(raw: str | None) -> dict[str, Any]:
     """Parse the JSON string OpenAI returns for tool arguments.
 
@@ -320,7 +388,15 @@ def _check_batch(texts: Sequence[str], max_batch_size: int) -> None:
 
 def _embedding_result(response: Any, model: str, dimensions: int) -> EmbeddingResult:
     """Build a result, restoring input order and verifying the vector width."""
-    items = sorted(response.data, key=lambda item: item.index)
+    # OpenAI documents `index` on every item and does not promise to return them
+    # in order, so the input order is restored from it. Google's compatibility
+    # endpoint leaves the field null, which made this sort raise "'<' not
+    # supported between instances of 'int' and 'NoneType'" partway through a
+    # sync. When any index is missing there is nothing to sort by, and every
+    # such endpoint returns items in input order, so the response order stands.
+    items = list(response.data)
+    if all(getattr(item, "index", None) is not None for item in items):
+        items.sort(key=lambda item: item.index)
     vectors: list[Vector] = []
 
     for item in items:
