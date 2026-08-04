@@ -51,6 +51,21 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
+      # Checking out a commit by SHA leaves the repository in detached HEAD.
+      # semantic-release decides whether a release is allowed by matching the
+      # *current branch name* against `[tool.semantic_release.branches.main]`,
+      # and detached HEAD has no name to match, so it stopped with "Detached
+      # HEAD state cannot match any release groups; no release will be made"
+      # and exited non-zero before writing a version. Every release run since
+      # the workflow was written failed here.
+      #
+      # Naming the same commit rather than checking out the branch: the release
+      # must be the commit CI validated, and `main` may already have moved on.
+      # `git push origin HEAD:main` further down stays a fast-forward, so a
+      # `main` that has advanced is rejected rather than overwritten.
+      - name: Attach the validated commit to the release branch
+        run: git checkout -B main "${{ github.event.workflow_run.head_sha || github.sha }}"
+
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
