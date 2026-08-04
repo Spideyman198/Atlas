@@ -10,7 +10,22 @@ covers, what it deliberately does not, and the deprecation policy are in
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- Odoo served every database in the PostgreSQL cluster, including the engine's.
+  `dbfilter = .*` matched the `atlas` pgvector database, which shares the
+  cluster by design, and Odoo has no way to serve one: there is no
+  `ir_module_module`, so the registry fails to build and the request ends in
+  `KeyError: 'ir.http'` behind a bare "internal error" page.
+
+  Because Odoo remembers the chosen database per browser session, landing on it
+  once left the interface broken until the cookie was cleared — which reads as
+  the whole server being down rather than as a database selection.
+
+  The bootstrap wrapper now starts the server with `--db-filter` pinned to the
+  database it initialised, so nothing else is reachable. It is passed on the
+  command line rather than written into `odoo.conf` because the name comes from
+  `ODOO_DB_NAME` and that file is static and mounted read-only.
 
 ## [1.0.1] - 2026-08-04
 
