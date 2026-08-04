@@ -59,6 +59,15 @@ else
 	echo "[atlas-bootstrap] initialisation of '${DB_NAME}' complete"
 fi
 
-# Hand over to the image's own entrypoint, which injects the database connection
-# arguments and starts the server.
-exec /entrypoint.sh "$@"
+# Confine the server to the database this script bootstrapped.
+#
+# The engine's pgvector database lives in the same PostgreSQL cluster, so Odoo
+# can see it, and `dbfilter = .*` in odoo.conf matched it along with every
+# throwaway test database. Serving one is not a degraded experience but a 500:
+# it has no `ir_module_module`, so the registry fails to build and every request
+# ends in `KeyError: 'ir.http'`. A session pinned to it stays broken until the
+# cookie is cleared, because the database is remembered per browser session.
+#
+# Passed here rather than written into odoo.conf because the name is
+# configurable and that file is static and mounted read-only.
+exec /entrypoint.sh "$@" --db-filter="^${DB_NAME}$"
